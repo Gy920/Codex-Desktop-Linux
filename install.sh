@@ -9,8 +9,16 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="${CODEX_INSTALL_DIR:-$SCRIPT_DIR/codex-app}"
 ELECTRON_VERSION="40.0.0"
+SEVENZIP_VERSION="26.00"
+SEVENZIP_VERSION_TAG="${SEVENZIP_VERSION//./}"
+MIN_SEVENZIP_MAJOR=22
 WORK_DIR="$(mktemp -d)"
 ARCH="$(uname -m)"
+SEVENZIP_BIN=""
+CC_BIN=""
+CXX_BIN=""
+CXXFLAGS_EXTRA=()
+LDFLAGS_EXTRA=()
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -30,15 +38,15 @@ trap 'error "Failed at line $LINENO (exit code $?)"' ERR
 # ---- Check dependencies ----
 check_deps() {
     local missing=()
-    for cmd in node npm npx python3 7z curl unzip; do
+    for cmd in node npm npx python3 curl tar unzip; do
         command -v "$cmd" &>/dev/null || missing+=("$cmd")
     done
     if [ ${#missing[@]} -ne 0 ]; then
         error "Missing dependencies: ${missing[*]}
 Install them first:
-  sudo apt install nodejs npm python3 p7zip-full curl unzip build-essential  # Debian/Ubuntu
-  sudo dnf install nodejs npm python3 p7zip curl unzip && sudo dnf groupinstall 'Development Tools'  # Fedora
-  sudo pacman -S nodejs npm python p7zip curl unzip base-devel  # Arch"
+  sudo apt install nodejs npm python3 curl tar unzip build-essential  # Debian/Ubuntu
+  sudo dnf install nodejs npm python3 curl tar unzip && sudo dnf groupinstall 'Development Tools'  # Fedora
+  sudo pacman -S nodejs npm python curl tar unzip base-devel  # Arch"
     fi
 
     NODE_MAJOR=$(node -v | cut -d. -f1 | tr -d v)
@@ -46,14 +54,167 @@ Install them first:
         error "Node.js 20+ required (found $(node -v))"
     fi
 
-    if ! command -v make &>/dev/null || ! command -v g++ &>/dev/null; then
-        error "Build tools (make, g++) required:
+    if ! command -v make &>/dev/null; then
+        error "Build tools (make, gcc/g++ or clang/clang++) required:
   sudo apt install build-essential   # Debian/Ubuntu
   sudo dnf groupinstall 'Development Tools'  # Fedora
   sudo pacman -S base-devel          # Arch"
     fi
 
+    if { ! command -v gcc &>/dev/null && ! command -v clang &>/dev/null; } || \
+       { ! command -v g++ &>/dev/null && ! command -v clang++ &>/dev/null; }; then
+        error "A C/C++ toolchain is required (gcc/g++ or clang/clang++)"
+    fi
+
     info "All dependencies found"
+}
+
+get_sevenzip_major_version() {
+    local sevenzip_bin="$1"
+    local version=""
+
+    version=$("$sevenzip_bin" i 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+' | head -1 || true)
+    [ -n "$version" ] || return 1
+
+    echo "${version%%.*}"
+}
+
+download_sevenzip() {
+    local sevenzip_arch cache_dir archive_path url
+
+    case "$ARCH" in
+        x86_64)  sevenzip_arch="x64" ;;
+        aarch64) sevenzip_arch="arm64" ;;
+        armv7l)  sevenzip_arch="arm" ;;
+        *)       error "Unsupported architecture for 7-Zip: $ARCH" ;;
+    esac
+
+    cache_dir="$SCRIPT_DIR/.cache/7zip/$SEVENZIP_VERSION/$sevenzip_arch"
+    SEVENZIP_BIN="$cache_dir/7zz"
+
+    if [ -x "$SEVENZIP_BIN" ]; then
+        info "Using cached 7-Zip: $SEVENZIP_BIN"
+        return
+    fi
+
+    mkdir -p "$cache_dir"
+    archive_path="$WORK_DIR/7zip.tar.xz"
+    url="https://www.7-zip.org/a/7z${SEVENZIP_VERSION_TAG}-linux-${sevenzip_arch}.tar.xz"
+
+    info "Downloading official 7-Zip ${SEVENZIP_VERSION} for Linux..."
+
+    if ! curl -L --progress-bar --max-time 300 --connect-timeout 30 \
+            -o "$archive_path" "$url"; then
+        error "Failed to download 7-Zip from $url"
+    fi
+
+    tar -xJf "$archive_path" -C "$cache_dir" >&2 || \
+        error "Failed to unpack 7-Zip archive"
+
+    [ -x "$SEVENZIP_BIN" ] || error "Downloaded 7-Zip archive did not contain 7zz"
+}
+
+ensure_sevenzip() {
+    local candidate major
+
+    if command -v 7zz &>/dev/null; then
+        candidate="$(command -v 7zz)"
+        major=$(get_sevenzip_major_version "$candidate" || echo 0)
+        if [ "$major" -ge "$MIN_SEVENZIP_MAJOR" ]; then
+            SEVENZIP_BIN="$candidate"
+            info "Using 7-Zip binary: $SEVENZIP_BIN"
+            return
+        fi
+        warn "Installed 7zz is too old for current Codex DMGs"
+    fi
+
+    if command -v 7z &>/dev/null; then
+        candidate="$(command -v 7z)"
+        major=$(get_sevenzip_major_version "$candidate" || echo 0)
+        if [ "$major" -ge "$MIN_SEVENZIP_MAJOR" ]; then
+            SEVENZIP_BIN="$candidate"
+            info "Using 7-Zip binary: $SEVENZIP_BIN"
+            return
+        fi
+        warn "Installed 7z ($(basename "$candidate")) is too old for current Codex DMGs; p7zip 16.x cannot extract the current Codex installer image"
+    fi
+
+    download_sevenzip
+    info "Using 7-Zip binary: $SEVENZIP_BIN"
+}
+
+compiler_supports_cxx20() {
+    local cxx_bin="$1"
+    shift
+    local test_dir="$WORK_DIR/compiler-check"
+
+    mkdir -p "$test_dir"
+    cat > "$test_dir/test.cpp" << 'EOF'
+#include <compare>
+#include <source_location>
+int main() {
+    auto order = (1 <=> 2);
+    auto loc = std::source_location::current();
+    return (order < 0 && loc.line() > 0) ? 0 : 1;
+}
+EOF
+    "$cxx_bin" -std=c++20 "$@" "$test_dir/test.cpp" -o "$test_dir/test-bin" >/dev/null 2>&1
+}
+
+select_toolchain() {
+    local suffix cc_candidate cxx_candidate
+
+    for suffix in 14 13 12 11 10 ""; do
+        if [ -n "$suffix" ]; then
+            cc_candidate="$(command -v "gcc-$suffix" 2>/dev/null || true)"
+            cxx_candidate="$(command -v "g++-$suffix" 2>/dev/null || true)"
+        else
+            cc_candidate="$(command -v gcc 2>/dev/null || true)"
+            cxx_candidate="$(command -v g++ 2>/dev/null || true)"
+        fi
+
+        if [ -n "$cc_candidate" ] && [ -n "$cxx_candidate" ] && \
+           compiler_supports_cxx20 "$cxx_candidate"; then
+            CC_BIN="$cc_candidate"
+            CXX_BIN="$cxx_candidate"
+            CXXFLAGS_EXTRA=()
+            LDFLAGS_EXTRA=()
+            info "Using toolchain: $(basename "$CC_BIN") / $(basename "$CXX_BIN")"
+            return
+        fi
+    done
+
+    for suffix in 18 17 16 15 14 13 12 11 10 ""; do
+        if [ -n "$suffix" ]; then
+            cc_candidate="$(command -v "clang-$suffix" 2>/dev/null || true)"
+            cxx_candidate="$(command -v "clang++-$suffix" 2>/dev/null || true)"
+        else
+            cc_candidate="$(command -v clang 2>/dev/null || true)"
+            cxx_candidate="$(command -v clang++ 2>/dev/null || true)"
+        fi
+
+        if [ -n "$cc_candidate" ] && [ -n "$cxx_candidate" ] && \
+           compiler_supports_cxx20 "$cxx_candidate"; then
+            CC_BIN="$cc_candidate"
+            CXX_BIN="$cxx_candidate"
+            CXXFLAGS_EXTRA=()
+            LDFLAGS_EXTRA=()
+            info "Using toolchain: $(basename "$CC_BIN") / $(basename "$CXX_BIN")"
+            return
+        fi
+
+        if [ -n "$cc_candidate" ] && [ -n "$cxx_candidate" ] && \
+           compiler_supports_cxx20 "$cxx_candidate" -stdlib=libc++; then
+            CC_BIN="$cc_candidate"
+            CXX_BIN="$cxx_candidate"
+            CXXFLAGS_EXTRA=(-stdlib=libc++)
+            LDFLAGS_EXTRA=(-stdlib=libc++)
+            info "Using toolchain: $(basename "$CC_BIN") / $(basename "$CXX_BIN") with libc++"
+            return
+        fi
+    done
+
+    error "A compiler with working C++20 standard library support is required. Install GCC 10+ (recommended) or Clang with libc++/libstdc++ that provides <compare>."
 }
 
 # ---- Download or find Codex DMG ----
@@ -89,10 +250,10 @@ get_dmg() {
 # ---- Extract app from DMG ----
 extract_dmg() {
     local dmg_path="$1"
-    info "Extracting DMG with 7z..."
+    info "Extracting DMG with $(basename "$SEVENZIP_BIN")..."
 
-    7z x -y "$dmg_path" -o"$WORK_DIR/dmg-extract" >&2 || \
-        error "Failed to extract DMG"
+    "$SEVENZIP_BIN" x -y "$dmg_path" -o"$WORK_DIR/dmg-extract" >&2 || \
+        error "Failed to extract DMG with $SEVENZIP_BIN"
 
     local app_dir
     app_dir=$(find "$WORK_DIR/dmg-extract" -maxdepth 3 -name "*.app" -type d | head -1)
@@ -124,11 +285,11 @@ build_native_modules() {
     echo '{"private":true}' > package.json
 
     info "Installing fresh sources from npm..."
-    npm install "electron@$ELECTRON_VERSION" --save-dev --ignore-scripts 2>&1 >&2
-    npm install "better-sqlite3@$bs3_ver" "node-pty@$npty_ver" --ignore-scripts 2>&1 >&2
+    CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" npm install "electron@$ELECTRON_VERSION" --save-dev --ignore-scripts 2>&1 >&2
+    CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" npm install "better-sqlite3@$bs3_ver" "node-pty@$npty_ver" --ignore-scripts 2>&1 >&2
 
     info "Compiling for Electron v$ELECTRON_VERSION (this takes ~1 min)..."
-    npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force 2>&1 >&2
+    CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force 2>&1 >&2
 
     info "Native modules built successfully"
 
@@ -256,6 +417,8 @@ main() {
     echo ""                                             >&2
 
     check_deps
+    ensure_sevenzip
+    select_toolchain
 
     local dmg_path=""
     if [ $# -ge 1 ] && [ -f "$1" ]; then
