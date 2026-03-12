@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+APP_DIR="/opt/codex-desktop"
+
+find_codex_cli() {
+    if [ -n "${CODEX_CLI_PATH:-}" ] && [ -x "${CODEX_CLI_PATH}" ]; then
+        printf '%s\n' "${CODEX_CLI_PATH}"
+        return 0
+    fi
+
+    if command -v codex >/dev/null 2>&1; then
+        command -v codex
+        return 0
+    fi
+
+    for candidate in \
+        "${HOME:-}/.local/bin/codex" \
+        "${HOME:-}/.npm-global/bin/codex" \
+        "${HOME:-}/bin/codex"
+    do
+        if [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    latest_nvm=""
+    for candidate in "${HOME:-}/.nvm/versions/node"/*/bin/codex; do
+        if [ -x "$candidate" ]; then
+            latest_nvm="$candidate"
+        fi
+    done
+
+    if [ -n "$latest_nvm" ]; then
+        printf '%s\n' "$latest_nvm"
+        return 0
+    fi
+
+    return 1
+}
+
+if codex_cli="$(find_codex_cli)"; then
+    export CODEX_CLI_PATH="$codex_cli"
+fi
+
+exec "$APP_DIR/start.sh" "$@"

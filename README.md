@@ -1,34 +1,58 @@
 # Codex Desktop for Linux
 
-Run [OpenAI Codex Desktop](https://openai.com/codex/) on Linux.
+Run [OpenAI Codex Desktop](https://openai.com/codex/) on Linux by converting the official macOS app bundle into a Linux-ready Electron app.
 
-The official Codex Desktop app is macOS-only. This project provides an automated installer that converts the macOS `.dmg` into a working Linux application.
+This repo now has three clear layers:
 
-## How it works
+1. `install.sh` converts `Codex.dmg` into a runnable `codex-app/`
+2. your private local helper can reapply custom patches to `app.asar`
+3. `build-deb.sh` packages the finished app into a Debian package
 
-The installer:
+## Repository layout
 
-1. Extracts the macOS `.dmg` (using a modern `7-Zip` binary)
-2. Extracts `app.asar` (the Electron app bundle)
-3. Rebuilds native Node.js modules (`node-pty`, `better-sqlite3`) for Linux
-4. Removes macOS-only modules (`sparkle` auto-updater)
-5. Downloads Linux Electron (same version as the app — v40)
-6. Repacks everything and creates a launch script
+Tracked source files:
 
-## Prerequisites
+- `install.sh` - convert the official DMG into `codex-app/`
+- `build-deb.sh` - package `codex-app/` into `dist/*.deb`
+- `packaging/deb/` - launcher, desktop file, and Debian metadata assets
+- `patches/codex-desktop/` - reusable patch bundle assets committed to git
+- `README.md` - end-to-end workflow and maintenance notes
 
-**Node.js 20+**, **npm**, **Python 3**, **curl**, **tar**, **unzip**, and **build tools** with working C++20 standard library support (`gcc/g++` 10+ recommended, or `clang/clang++` with libc++/libstdc++ that provides `<compare>`).
+Generated or local-only paths:
 
-The installer uses a recent `7-Zip` (`7zz`/`7z`, version 22+) if one is already installed. If your distro only ships old `p7zip` 16.x, the installer automatically downloads the official Linux `7-Zip` binary because current Codex DMGs do not extract with `p7zip`.
+- `codex-app/` - generated Linux app bundle
+- `dist/` - generated Debian packages
+- `.cache/` - downloaded helper tools such as modern `7-Zip`
+- `patch-work/` - temporary extraction and repack workdirs
+- `local/` - private helper scripts, intentionally gitignored
+- `Codex.dmg` - optional local copy of the upstream macOS installer
 
-For native rebuilds, the installer auto-detects `gcc/g++-10+` if you have versioned compiler packages installed (for example `g++-12`), so you do not need to repoint your system `g++` manually.
+## Requirements
+
+You always need the Codex CLI on the target machine:
+
+```bash
+npm i -g @openai/codex
+```
+
+To build the Linux app from the macOS DMG, you also need:
+
+- `Node.js 20+`
+- `npm`
+- `Python 3`
+- `curl`
+- `tar`
+- `unzip`
+- build tools with working C++20 support
+
+The installer prefers a recent `7-Zip` (`7zz`/`7z`, version 22+). If your distro only ships old `p7zip` 16.x, `install.sh` downloads the official Linux `7-Zip` binary into `.cache/` automatically.
 
 ### Debian/Ubuntu
 
 ```bash
 sudo apt install nodejs npm python3 curl tar unzip build-essential
-sudo apt install gcc-10 g++-10   # Ubuntu 20.04 / focal
-sudo apt install clang-18 libc++-18-dev libc++abi-18-dev   # Ubuntu 20.04 / focal fallback when GCC is still too old
+sudo apt install gcc-10 g++-10
+sudo apt install clang-18 libc++-18-dev libc++abi-18-dev
 ```
 
 ### Fedora
@@ -44,77 +68,136 @@ sudo dnf groupinstall 'Development Tools'
 sudo pacman -S nodejs npm python curl tar unzip base-devel
 ```
 
-You also need the **Codex CLI**:
+## End-to-end workflow
+
+### 1. Convert the official DMG into a Linux app
+
+Auto-download the current DMG:
 
 ```bash
-npm i -g @openai/codex
-```
-
-## Installation
-
-### Option A: Auto-download DMG
-
-```bash
-git clone https://github.com/ilysenko/codex-desktop-linux.git
-cd codex-desktop-linux
-chmod +x install.sh
 ./install.sh
 ```
 
-### Option B: Provide your own DMG
-
-Download `Codex.dmg` from [openai.com/codex](https://openai.com/codex/), then:
+Or use a DMG you already downloaded:
 
 ```bash
 ./install.sh /path/to/Codex.dmg
 ```
 
-## Usage
+This produces:
 
-The app is installed into `codex-app/` next to the install script:
-
-```bash
-codex-desktop-linux/codex-app/start.sh
+```text
+./codex-app/
 ```
 
-Or add an alias to your shell:
+### 2. Reapply local custom patches
+
+If you maintain a private helper in `local/`, run it after every new `install.sh` output so the generated `codex-app/resources/app.asar` picks up your local fixes again.
+
+Typical local command:
 
 ```bash
-echo 'alias codex-desktop="~/codex-desktop-linux/codex-app/start.sh"' >> ~/.bashrc
+./local/apply_codex_patch.py ./codex-app/resources/app.asar
 ```
 
-### Custom install directory
+In this workspace, the committed patch bundle under `patches/codex-desktop/` is designed for:
+
+- bundled `Ubuntu` / `Ubuntu Mono` fonts
+- Linux project picker fixes
+- the recommended-skills clone workaround
+
+If OpenAI changes the bundle layout in a future release, adjust `patches/codex-desktop/manifest.json` and rerun your local helper.
+
+### 3. Run the unpacked app
+
+```bash
+./codex-app/start.sh
+```
+
+Optional custom install directory while converting:
 
 ```bash
 CODEX_INSTALL_DIR=/opt/codex ./install.sh
 ```
 
-## How it works (technical details)
+### 4. Build a Debian package
 
-The macOS Codex app is an Electron application. The core code (`app.asar`) is platform-independent JavaScript, but it bundles:
+Once `codex-app/` is in the exact state you want, package it:
 
-- **Native modules** compiled for macOS (`node-pty` for terminal emulation, `better-sqlite3` for local storage, `sparkle` for auto-updates)
-- **Electron binary** for macOS
+```bash
+./build-deb.sh
+```
 
-The installer replaces the macOS Electron with a Linux build and recompiles the native modules using `@electron/rebuild`. The `sparkle` module (macOS-only auto-updater) is removed since it has no Linux equivalent.
+This writes a package to:
 
-A small Python HTTP server is used as a workaround: when `app.isPackaged` is `false` (which happens with extracted builds), the app tries to connect to a Vite dev server on `localhost:5175`. The HTTP server serves the static webview files on that port.
+```text
+./dist/codex-desktop-linux_<version>_<arch>.deb
+```
+
+Useful overrides:
+
+```bash
+MAINTAINER_NAME="Your Name" \
+MAINTAINER_EMAIL="you@example.com" \
+PACKAGE_NAME="codex-desktop-linux" \
+./build-deb.sh
+```
+
+### 5. Install the Debian package
+
+```bash
+sudo dpkg -i ./dist/codex-desktop-linux_<version>_<arch>.deb
+sudo apt -f install
+```
+
+Then make sure the Codex CLI exists for the launcher:
+
+```bash
+npm i -g @openai/codex
+```
+
+## Updating to a new Codex release
+
+When a new upstream `Codex.dmg` appears, redo the build in this order:
+
+```bash
+./install.sh /path/to/new/Codex.dmg
+./local/apply_codex_patch.py ./codex-app/resources/app.asar   # if you keep the local helper
+./build-deb.sh                                                # optional
+```
+
+Important detail: `build-deb.sh` packages the current contents of `codex-app/` exactly as they are. If you want your fonts or JS fixes inside the `.deb`, apply your local patch before running `build-deb.sh`.
+
+## How it works
+
+The macOS Codex app is an Electron app. The platform-independent JavaScript lives in `app.asar`, but the original bundle also includes:
+
+- native modules compiled for macOS
+- a macOS Electron runtime
+- macOS-only updater pieces such as `sparkle`
+
+`install.sh` extracts the DMG, swaps in a Linux Electron runtime, rebuilds native modules such as `node-pty` and `better-sqlite3`, removes macOS-only pieces, and creates a Linux launcher.
+
+`build-deb.sh` does not rebuild the app; it simply packages the current `codex-app/` tree together with the desktop launcher assets from `packaging/deb/`.
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| `Error: write EPIPE` | Make sure you're not piping the output — run `start.sh` directly |
-| `Open ERROR: Can not open the file as [Dmg] archive` | You're using old `p7zip` 16.x. Re-run `install.sh` and let it download a modern official `7-Zip` binary, or install `7zz` 22+ yourself |
-| `g++: error: unrecognized command line option '-std=c++20'` or `fatal error: 'compare' file not found` | Your toolchain is too old for the current native modules. Install GCC 10+ (recommended) or a Clang toolchain with a C++20 standard library |
-| Blank window | Check that port 5175 is not in use: `lsof -i :5175` |
-| `CODEX_CLI_PATH` error | Install CLI: `npm i -g @openai/codex` |
-| GPU/rendering issues | Try: `./codex-app/start.sh --disable-gpu` |
-| Sandbox errors | The `--no-sandbox` flag is already set in `start.sh` |
+| `Error: write EPIPE` | Run `start.sh` directly; do not pipe its output |
+| `Open ERROR: Can not open the file as [Dmg] archive` | Your `7z` is too old; rerun `install.sh` and let it fetch a newer 7-Zip, or install `7zz` 22+ |
+| `g++: error: unrecognized command line option '-std=c++20'` or `fatal error: 'compare' file not found` | Install GCC 10+ or Clang with a working C++20 standard library |
+| Blank window | Check whether port `5175` is already in use: `lsof -i :5175` |
+| `Codex CLI not found` | Install it with `npm i -g @openai/codex`, or set `CODEX_CLI_PATH` manually |
+| App menu icon is correct but taskbar icon is wrong | Reinstall the latest `.deb`, remove any old pinned icon, then re-pin the running app |
+| GPU/rendering issues | Try `./codex-app/start.sh --disable-gpu` |
+| Sandbox errors | The launcher already adds `--no-sandbox` |
 
 ## Disclaimer
 
-This is an unofficial community project. Codex Desktop is a product of OpenAI. This tool does not redistribute any OpenAI software — it automates the conversion process that users perform on their own copies.
+This is an unofficial community project. Codex Desktop is a product of OpenAI.
+
+Make sure you understand the redistribution implications before publicly sharing repackaged application bundles.
 
 ## License
 

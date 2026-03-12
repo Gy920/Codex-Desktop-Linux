@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Codex Desktop
+Comment=OpenAI Codex Desktop for Linux
+Exec=codex-desktop %U
+TryExec=codex-desktop
+Icon=/usr/share/pixmaps/codex-desktop.png
+Terminal=false
+Categories=Development;Utility;
+Keywords=AI;Assistant;Development;OpenAI;
+StartupNotify=true
+StartupWMClass=Codex

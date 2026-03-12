@@ -1,0 +1,14 @@
+Codex Desktop for Linux
+=======================
+
+This package installs the repacked Codex Desktop bundle from this repository
+under /opt/codex-desktop and adds a launcher at /usr/bin/codex-desktop.
+
+The desktop app still needs the Codex CLI to exist on the machine as the
+`codex` command. Install it with:
+
+  npm i -g @openai/codex
+
+If you install the CLI through nvm, the desktop launcher tries a few common
+locations such as ~/.nvm/versions/node/*/bin/codex. If that still does not
+work, set CODEX_CLI_PATH explicitly before launching the app.

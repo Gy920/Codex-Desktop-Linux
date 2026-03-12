@@ -4,3 +4,4 @@ codex-app/
 dist/
 local/
 patch-work/
+.cache/
