@@ -87,7 +87,7 @@ The installer prefers a recent `7-Zip` (`7zz`/`7z`, version 22+). If your distro
 
 ```bash
 sudo apt install nodejs npm python3 curl tar unzip build-essential
-sudo apt install gcc-10 g++-10
+sudo apt install gcc-12 g++-12
 sudo apt install clang-18 libc++-18-dev libc++abi-18-dev
 ```
 
