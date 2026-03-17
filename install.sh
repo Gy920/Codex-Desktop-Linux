@@ -217,6 +217,28 @@ select_toolchain() {
     error "A compiler with working C++20 standard library support is required. Install GCC 10+ (recommended) or Clang with libc++/libstdc++ that provides <compare>."
 }
 
+resolve_runtime_lib() {
+    local lib_name="$1"
+    local compiler_path=""
+    local resolved_path=""
+
+    if [ -n "${CC_BIN:-}" ]; then
+        compiler_path="$("$CC_BIN" -print-file-name="$lib_name" 2>/dev/null || true)"
+        if [ -n "$compiler_path" ] && [ "$compiler_path" != "$lib_name" ] && [ -e "$compiler_path" ]; then
+            readlink -f "$compiler_path"
+            return 0
+        fi
+    fi
+
+    resolved_path="$(ldconfig -p 2>/dev/null | awk -v lib="$lib_name" '$1==lib {print $NF; exit}')"
+    if [ -n "$resolved_path" ] && [ -e "$resolved_path" ]; then
+        readlink -f "$resolved_path"
+        return 0
+    fi
+
+    return 1
+}
+
 # ---- Download or find Codex DMG ----
 get_dmg() {
     local dmg_dest="$SCRIPT_DIR/Codex.dmg"
@@ -377,6 +399,23 @@ install_app() {
     info "app.asar installed"
 }
 
+bundle_runtime_libs() {
+    local compat_dir="$INSTALL_DIR/lib"
+    local libs=(
+        "libstdc++.so.6"
+        "libgcc_s.so.1"
+    )
+    local lib src
+
+    mkdir -p "$compat_dir"
+    for lib in "${libs[@]}"; do
+        src="$(resolve_runtime_lib "$lib" || true)"
+        [ -n "$src" ] || error "Could not locate runtime library: $lib"
+        cp -L "$src" "$compat_dir/$lib"
+        info "Bundled runtime library: $lib"
+    done
+}
+
 # ---- Create start script ----
 create_start_script() {
     cat > "$INSTALL_DIR/start.sh" << 'SCRIPT'
@@ -395,6 +434,11 @@ if [ -d "$WEBVIEW_DIR" ] && [ "$(ls -A "$WEBVIEW_DIR" 2>/dev/null)" ]; then
 fi
 
 export CODEX_CLI_PATH="${CODEX_CLI_PATH:-$(which codex 2>/dev/null)}"
+COMPAT_LIB_DIR="$SCRIPT_DIR/lib"
+
+if [ -d "$COMPAT_LIB_DIR" ]; then
+    export LD_LIBRARY_PATH="$COMPAT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 
 if [ -z "$CODEX_CLI_PATH" ]; then
     echo "Error: Codex CLI not found. Install with: npm i -g @openai/codex"
@@ -435,6 +479,7 @@ main() {
     download_electron
     extract_webview "$app_dir"
     install_app
+    bundle_runtime_libs
     create_start_script
 
     if ! command -v codex &>/dev/null; then

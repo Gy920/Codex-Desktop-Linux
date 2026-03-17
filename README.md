@@ -233,7 +233,7 @@ The macOS Codex app is an Electron app. The platform-independent JavaScript live
 - a macOS Electron runtime
 - macOS-only updater pieces such as `sparkle`
 
-`install.sh` extracts the DMG, swaps in a Linux Electron runtime, rebuilds native modules such as `node-pty` and `better-sqlite3`, removes macOS-only pieces, and creates a Linux launcher.
+`install.sh` extracts the DMG, swaps in a Linux Electron runtime, rebuilds native modules such as `node-pty` and `better-sqlite3`, bundles compatible C++ runtime libraries under `codex-app/lib`, removes macOS-only pieces, and creates a Linux launcher.
 
 `build-deb.sh` does not rebuild the app; it simply packages the current `codex-app/` tree together with the desktop launcher assets from `packaging/deb/`.
 
@@ -246,6 +246,7 @@ The macOS Codex app is an Electron app. The platform-independent JavaScript live
 | `g++: error: unrecognized command line option '-std=c++20'` or `fatal error: 'compare' file not found` | Install GCC 10+ or Clang with a working C++20 standard library |
 | Blank window | Check whether port `5175` is already in use: `lsof -i :5175` |
 | `Codex CLI not found` | Install it with `npm i -g @openai/codex`, or set `CODEX_CLI_PATH` manually |
+| `/lib/x86_64-linux-gnu/libstdc++.so.6: version 'GLIBCXX_x.y.z' not found` | Re-run `install.sh` to refresh bundled runtime libraries in `codex-app/lib`; launcher prepends this directory to `LD_LIBRARY_PATH` |
 | App menu icon is correct but taskbar icon is wrong | Reinstall the latest `.deb`, remove any old pinned icon, then re-pin the running app |
 | GPU/rendering issues | Try `./codex-app/start.sh --disable-gpu` |
 | Sandbox errors | The launcher already adds `--no-sandbox` |
