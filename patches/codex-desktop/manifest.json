@@ -33,34 +33,34 @@
     {
       "name": "linux-picker-allow-file-selection",
       "glob": ".vite/build/main-*.js",
-      "find": "const e=[\"openDirectory\",\"createDirectory\"];await this.shouldShowHiddenFilesInPicker()&&e.push(\"showHiddenFiles\");const i=await x.dialog.showOpenDialog({properties:e,title:\"Select Project Root\"}),n=i.filePaths?.[0];",
-      "replace": "const e=process.platform===\"linux\"?[\"openFile\",\"openDirectory\",\"createDirectory\"]:[\"openDirectory\",\"createDirectory\"];await this.shouldShowHiddenFilesInPicker()&&e.push(\"showHiddenFiles\");const i=await x.dialog.showOpenDialog({properties:e,title:\"Select Project Root\"}),n=i.filePaths?.[0];",
-      "count": 1,
+      "find_regex": "const (\\w+)=\\[\"openDirectory\",\"createDirectory\"\\];await this\\.shouldShowHiddenFilesInPicker\\(\\)&&\\1\\.push\\(\"showHiddenFiles\"\\);const (\\w+)=await (\\w+)\\.dialog\\.showOpenDialog\\(\\{properties:\\1,title:\"Select Project Root\"\\}\\),(\\w+)=\\2\\.filePaths\\?\\.\\[0\\];",
+      "replace": "const \\1=process.platform===\"linux\"?[\"openFile\",\"openDirectory\",\"createDirectory\"]:[\"openDirectory\",\"createDirectory\"];await this.shouldShowHiddenFilesInPicker()&&\\1.push(\"showHiddenFiles\");const \\2=await \\3.dialog.showOpenDialog({properties:\\1,title:\"Select Project Root\"}),\\4=\\2.filePaths?.[0];",
+      "count": 2,
       "already_contains": "process.platform===\"linux\"?[\"openFile\",\"openDirectory\",\"createDirectory\"]:[\"openDirectory\",\"createDirectory\"]"
     },
     {
       "name": "linux-picker-resolve-parent-directory",
       "glob": ".vite/build/main-*.js",
-      "find": "async resolveWorkspaceRoot(e){try{const t=Qe(e,this.host);return(await Se.stat(t)).isDirectory()?y.resolve(t):null}catch(t){return B().warning(\"Failed to stat workspace root\",{safe:{},sensitive:{error:t}}),null}}",
-      "replace": "async resolveWorkspaceRoot(e){try{const t=Qe(e,this.host),i=await Se.stat(t);if(i.isDirectory())return y.resolve(t);if(i.isFile()){const n=y.dirname(t),o=await Se.stat(n);if(o.isDirectory())return y.resolve(n)}return null}catch(t){return B().warning(\"Failed to stat workspace root\",{safe:{},sensitive:{error:t}}),null}}",
+      "find_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{const (\\w+)=Qe\\(e,this\\.host\\);return\\(await (\\w+)\\.stat\\(\\1\\)\\)\\.isDirectory\\(\\)\\?(\\w+)\\.resolve\\(\\1\\):null\\}catch\\((\\w+)\\)\\{return (\\w+)\\(\\)\\.warning\\(\"Failed to stat workspace root\",\\{safe:\\{\\},sensitive:\\{error:\\4\\}\\}\\),null\\}\\}",
+      "replace": "async resolveWorkspaceRoot(e){try{const \\1=Qe(e,this.host),i=await \\2.stat(\\1);if(i.isDirectory())return \\3.resolve(\\1);if(i.isFile()){const n=\\3.dirname(\\1),o=await \\2.stat(n);if(o.isDirectory())return \\3.resolve(n)}return null}catch(\\4){return \\5().warning(\"Failed to stat workspace root\",{safe:{},sensitive:{error:\\4}}),null}}",
       "count": 1,
-      "already_contains": "if(i.isFile()){const n=y.dirname(t),o=await Se.stat(n);if(o.isDirectory())return y.resolve(n)}"
+      "already_contains": "if(i.isFile()){const n="
     },
     {
       "name": "open-file-linux-fallback-file-manager",
       "glob": ".vite/build/main-*.js",
-      "find": "if(f=Dk({target:f,hasExplicitTarget:h,platform:process.platform}),!f)throw new Error(\"No available open target\");",
-      "replace": "if(f=Dk({target:f,hasExplicitTarget:h,platform:process.platform}),!f){if(process.platform===\"linux\")f=\"fileManager\";else throw new Error(\"No available open target\")}",
+      "find_regex": "if\\((\\w+)=(\\w+)\\(\\{target:\\1,hasExplicitTarget:(\\w+),platform:process\\.platform\\}\\),!\\1\\)throw new Error\\(\"No available open target\"\\);",
+      "replace": "if(\\1=\\2({target:\\1,hasExplicitTarget:\\3,platform:process.platform}),!\\1){if(process.platform===\"linux\")\\1=\"fileManager\";else throw new Error(\"No available open target\")}",
       "count": 1,
-      "already_contains": "if(f=Dk({target:f,hasExplicitTarget:h,platform:process.platform}),!f){if(process.platform===\"linux\")f=\"fileManager\";else throw new Error(\"No available open target\")}"
+      "already_contains": "process.platform===\"linux\")"
     },
     {
       "name": "skills-clone-without-sparse",
       "glob": ".vite/build/main-*.js",
-      "find": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",\"--sparse\",Lw,r]",
-      "replace": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",Lw,r]",
+      "find_regex": "\\[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",\"--sparse\",(\\w+),(\\w+)\\]",
+      "replace": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",\\1,\\2]",
       "count": 1,
-      "already_contains": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",Lw,r]"
+      "already_contains": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\","
     }
   ]
 }
