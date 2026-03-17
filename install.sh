@@ -239,6 +239,21 @@ resolve_runtime_lib() {
     return 1
 }
 
+native_module_needs_lib() {
+    local lib_name="$1"
+    shift
+    local module_path
+
+    for module_path in "$@"; do
+        [ -f "$module_path" ] || continue
+        if ldd "$module_path" 2>/dev/null | grep -Fq "$lib_name =>"; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # ---- Download or find Codex DMG ----
 get_dmg() {
     local dmg_dest="$SCRIPT_DIR/Codex.dmg"
@@ -401,18 +416,36 @@ install_app() {
 
 bundle_runtime_libs() {
     local compat_dir="$INSTALL_DIR/lib"
-    local libs=(
+    local required_libs=(
         "libstdc++.so.6"
         "libgcc_s.so.1"
+    )
+    local optional_libs=(
+        "libc++.so.1"
+        "libc++abi.so.1"
+        "libunwind.so.1"
+    )
+    local native_modules=(
+        "$INSTALL_DIR/resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+        "$INSTALL_DIR/resources/app.asar.unpacked/node_modules/node-pty/build/Release/pty.node"
     )
     local lib src
 
     mkdir -p "$compat_dir"
-    for lib in "${libs[@]}"; do
+    for lib in "${required_libs[@]}"; do
         src="$(resolve_runtime_lib "$lib" || true)"
         [ -n "$src" ] || error "Could not locate runtime library: $lib"
         cp -L "$src" "$compat_dir/$lib"
         info "Bundled runtime library: $lib"
+    done
+
+    for lib in "${optional_libs[@]}"; do
+        if native_module_needs_lib "$lib" "${native_modules[@]}"; then
+            src="$(resolve_runtime_lib "$lib" || true)"
+            [ -n "$src" ] || error "Native modules require $lib but it could not be located"
+            cp -L "$src" "$compat_dir/$lib"
+            info "Bundled runtime library: $lib (detected from native modules)"
+        fi
     done
 }
 
