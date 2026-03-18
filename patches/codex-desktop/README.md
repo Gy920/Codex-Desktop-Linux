@@ -17,8 +17,6 @@ What this bundle changes:
   exposes file selection
 - resolves a selected file back to its parent directory
 - removes the `git clone --sparse` flag from recommended-skills bootstrap
-- enables the remote project setup dialog gate in the web UI, so SSH-backed
-  remote mappings can be configured from the desktop client
 
 Expected local workflow after updating Codex Desktop:
 
