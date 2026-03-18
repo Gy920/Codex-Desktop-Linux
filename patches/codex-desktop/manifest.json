@@ -101,6 +101,6 @@
       "replace": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./remote-connections-settings-BY9N7Qjx.js`).then(e=>({default:e.RemoteConnectionsSettings})),__vite__mapDeps([103,2,6,7,4,3,8,9,20,18,19,21,24,25,13,26,27,104,68,29,31,96,105,38]),import.meta.url)),",
       "count": 1,
       "already_contains": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./remote-connections-settings-BY9N7Qjx.js`).then(e=>({default:e.RemoteConnectionsSettings})),__vite__mapDeps([103,2,6,7,4,3,8,9,20,18,19,21,24,25,13,26,27,104,68,29,31,96,105,38]),import.meta.url)),"
-    },
+    }
   ]
 }
