@@ -16,6 +16,8 @@ What this bundle changes:
 - keeps the Linux "Select project" flow working even when the file chooser only
   exposes file selection
 - resolves a selected file back to its parent directory
+- forces the built-in remote project setup feature gate on, which also exposes
+  the dedicated Connections / remote project entry points wired to that gate
 - removes the `git clone --sparse` flag from recommended-skills bootstrap
 
 Expected local workflow after updating Codex Desktop:

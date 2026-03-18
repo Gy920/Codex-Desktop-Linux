@@ -61,6 +61,46 @@
       "replace": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",\\1,\\2]",
       "count": 1,
       "already_contains": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\","
-    }
+    },
+    {
+      "name": "enable-remote-project-setup-ui",
+      "glob": "webview/assets/statsig-*.js",
+      "find": "function De(e){return Le(),(0,Ce.useGateValue)(e)}",
+      "replace": "function De(e){let t=(Le(),(0,Ce.useGateValue)(e));return e===`4114442250`?!0:t}",
+      "count": 1,
+      "already_contains": "e===`4114442250`?!0:t"
+    },
+    {
+      "name": "show-connections-settings-entry",
+      "glob": "webview/assets/index-*.js",
+      "find": "case`skills-settings`:return r===`extension`;case`connections`:return r===`electron`&&a;case`usage`:return o;",
+      "replace": "case`skills-settings`:return r===`extension`;case`connections`:return!0;case`usage`:return o;",
+      "count": 1,
+      "already_contains": "case`skills-settings`:return r===`extension`;case`connections`:return!0;case`usage`:return o;"
+    },
+    {
+      "name": "inject-connections-into-visible-settings-sections",
+      "glob": "webview/assets/index-*.js",
+      "find": "t[7]=a,t[8]=o,t[9]=r,t[10]=e):e=t[10],l=ql.filter(e);let i;",
+      "replace": "t[7]=a,t[8]=o,t[9]=r,t[10]=e):e=t[10],l=ql.filter(e),l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;",
+      "count": 1,
+      "already_contains": "l=ql.filter(e),l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;"
+    },
+    {
+      "name": "mcp-settings-entry-opens-connections",
+      "glob": "webview/assets/index-*.js",
+      "find": "window.open(e.externalUrl,`_blank`,`noopener,noreferrer`);return}t||i(e.slug)",
+      "replace": "window.open(e.externalUrl,`_blank`,`noopener,noreferrer`);return}t||i(e.slug===`mcp-settings`?`connections`:e.slug)",
+      "count": 1,
+      "already_contains": "t||i(e.slug===`mcp-settings`?`connections`:e.slug)"
+    },
+    {
+      "name": "mcp-settings-page-renders-remote-connections",
+      "glob": "webview/assets/index-*.js",
+      "find": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./mcp-settings-DrgCUGND.js`).then(e=>({default:e.McpSettings})),__vite__mapDeps([100,2,6,7,4,3,8,9,20,18,19,21,22,23,24,25,13,26,27,53,101,67,29,88,69,86,102,31,94,74,95,96,38,39]),import.meta.url)),",
+      "replace": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./remote-connections-settings-BY9N7Qjx.js`).then(e=>({default:e.RemoteConnectionsSettings})),__vite__mapDeps([103,2,6,7,4,3,8,9,20,18,19,21,24,25,13,26,27,104,68,29,31,96,105,38]),import.meta.url)),",
+      "count": 1,
+      "already_contains": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./remote-connections-settings-BY9N7Qjx.js`).then(e=>({default:e.RemoteConnectionsSettings})),__vite__mapDeps([103,2,6,7,4,3,8,9,20,18,19,21,24,25,13,26,27,104,68,29,31,96,105,38]),import.meta.url)),"
+    },
   ]
 }

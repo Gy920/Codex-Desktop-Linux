@@ -145,9 +145,38 @@ In this workspace, the committed patch bundle under `patches/codex-desktop/` is 
 
 - bundled `Ubuntu` / `Ubuntu Mono` fonts
 - Linux project picker fixes
+- hidden remote connections UI enablement
 - the recommended-skills clone workaround
 
 If OpenAI changes the bundle layout in a future release, adjust `patches/codex-desktop/manifest.json` and rerun your local helper.
+
+For the packaged Linux app installed under `/opt/codex-desktop`, this repo also
+includes a post-install helper that patches the rendered deb webview assets and
+optionally repairs remote SSH hosts so non-interactive shells can find `node`
+and `codex`:
+
+```bash
+sudo python3 ./scripts/fix_remote_connections.py \
+  --assets-dir /opt/codex-desktop/content/webview/assets \
+  --remote-host <ssh-alias>
+```
+
+You can pass one or more SSH aliases that already work with plain `ssh`:
+
+```bash
+sudo python3 ./scripts/fix_remote_connections.py \
+  --assets-dir /opt/codex-desktop/content/webview/assets \
+  --remote-host <ssh-alias-1> \
+  --remote-host <ssh-alias-2>
+```
+
+That helper:
+
+- exposes `Settings -> Connections`
+- removes the temporary General-page helper row if it was previously injected
+- forces the remote feature gate on in the rendered deb assets
+- checks remote `node` / `npm` / `codex`
+- updates remote `~/.bashrc` so SSH-launched Codex app-server can start reliably
 
 ### 3. Run the unpacked app
 
