@@ -61,6 +61,13 @@
       "replace": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",\\1,\\2]",
       "count": 1,
       "already_contains": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\","
+    },
+    {
+      "name": "enable-remote-project-setup-ui",
+      "glob": "webview/assets/index-*.js",
+      "find_regex": "El\\(`4114442250`\\)",
+      "replace": "!0",
+      "count": 2
     }
   ]
 }
