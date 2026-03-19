@@ -62,6 +62,7 @@ jobs:
 
       - name: Build Linux app from latest DMG
         env:
+          CODEX_FORCE_DOWNLOADED_7ZIP: "1"
           npm_config_python: /usr/bin/python3
         run: |
           rm -f Codex.dmg

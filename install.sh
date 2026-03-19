@@ -117,6 +117,12 @@ download_sevenzip() {
 ensure_sevenzip() {
     local candidate major
 
+    if [ "${CODEX_FORCE_DOWNLOADED_7ZIP:-}" = "1" ]; then
+        download_sevenzip
+        info "Using 7-Zip binary: $SEVENZIP_BIN"
+        return
+    fi
+
     if command -v 7zz &>/dev/null; then
         candidate="$(command -v 7zz)"
         major=$(get_sevenzip_major_version "$candidate" || echo 0)
