@@ -151,9 +151,9 @@ jobs:
           previous_tag="$(git tag --list 'codex-desktop-linux-v*' --sort=-creatordate | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)"
 
           if [ -n "$previous_tag" ]; then
-            commit_list="$(git log --pretty=format:'- %h %s (%an)' "${previous_tag}..HEAD")"
+            commit_list="$(git log --pretty=format:'- %h %s' "${previous_tag}..HEAD")"
           else
-            commit_list="$(git log -n 20 --pretty=format:'- %h %s (%an)')"
+            commit_list="$(git log -n 20 --pretty=format:'- %h %s')"
           fi
 
           if [ -z "$commit_list" ]; then
