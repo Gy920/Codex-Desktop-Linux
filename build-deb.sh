@@ -89,6 +89,7 @@ EOF
 command -v dpkg-deb >/dev/null 2>&1 || error "dpkg-deb is required"
 command -v install >/dev/null 2>&1 || error "install is required"
 
+BUNDLE_DIR="$SCRIPT_DIR/patches/codex-desktop"
 if [ -z "$ICON_SOURCE" ]; then
     ICON_SOURCE="$(find "$APP_DIR/content/webview/assets" -maxdepth 1 -type f -name 'app-*.png' | head -1 || true)"
 fi
@@ -114,6 +115,23 @@ mkdir -p "$PACKAGE_ROOT$INSTALL_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 cp -a "$APP_DIR/." "$PACKAGE_ROOT$INSTALL_DIR/"
+
+if [ -d "$BUNDLE_DIR" ]; then
+    python3 "$SCRIPT_DIR/scripts/apply_patch_bundle.py" \
+        --bundle-dir "$BUNDLE_DIR" \
+        --asar "$PACKAGE_ROOT$INSTALL_DIR/resources/app.asar" \
+        --work-root "$STAGING_DIR/patch-work/asar" \
+        --glob-prefix ".vite/build/" \
+        --skip-copy-tree
+
+    if [ -d "$PACKAGE_ROOT$INSTALL_DIR/content" ]; then
+        python3 "$SCRIPT_DIR/scripts/apply_patch_bundle.py" \
+            --bundle-dir "$BUNDLE_DIR" \
+            --target-dir "$PACKAGE_ROOT$INSTALL_DIR/content" \
+            --glob-prefix "webview/assets/" \
+            --ignore-count
+    fi
+fi
 
 install -Dm755 "$SCRIPT_DIR/packaging/deb/usr/bin/codex-desktop" \
     "$PACKAGE_ROOT/usr/bin/codex-desktop"

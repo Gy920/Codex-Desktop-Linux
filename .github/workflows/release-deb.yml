@@ -17,16 +17,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-release:
-    runs-on: ubuntu-22.04
+  prepare-release:
+    runs-on: ubuntu-24.04
     container:
       image: ubuntu:20.04
     defaults:
       run:
         shell: bash
+    outputs:
+      skip_build: ${{ steps.release_check.outputs.skip_build }}
+      codex_app_version: ${{ steps.collect_metadata.outputs.codex_app_version }}
+      codex_build_number: ${{ steps.collect_metadata.outputs.codex_build_number }}
+      electron_version: ${{ steps.collect_metadata.outputs.electron_version }}
+      release_tag: ${{ steps.collect_metadata.outputs.release_tag }}
+      release_name: ${{ steps.collect_metadata.outputs.release_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,11 +52,11 @@ jobs:
           apt-get install -y \
             build-essential \
             ca-certificates \
-            git \
-            gcc-11 \
-            g++-11 \
-            python3 \
             curl \
+            g++-11 \
+            gcc-11 \
+            git \
+            python3 \
             tar \
             unzip \
             xz-utils
@@ -60,7 +69,8 @@ jobs:
           chmod +x install.sh
           ./install.sh
 
-      - name: Collect Codex app metadata
+      - name: Collect release metadata
+        id: collect_metadata
         run: |
           meta_dir="$(mktemp -d)"
           (
@@ -68,31 +78,32 @@ jobs:
             npx --yes asar extract-file "$GITHUB_WORKSPACE/codex-app/resources/app.asar" package.json
           )
 
-          CODEX_APP_VERSION="$(node -p "require('$meta_dir/package.json').version")"
-          CODEX_BUILD_NUMBER="$(node -p "require('$meta_dir/package.json').codexBuildNumber || ''")"
-          ELECTRON_VERSION="$(tr -d '\n' < codex-app/version)"
-          RELEASE_TAG="codex-desktop-linux-v${CODEX_APP_VERSION}-ubuntu20.04"
-          RELEASE_NAME="Codex Desktop Linux ${CODEX_APP_VERSION} for Ubuntu 20.04"
+          codex_app_version="$(node -p "require('$meta_dir/package.json').version")"
+          codex_build_number="$(node -p "require('$meta_dir/package.json').codexBuildNumber || ''")"
+          electron_version="$(tr -d '\n' < codex-app/version)"
+          release_tag="codex-desktop-linux-v${codex_app_version}"
+          release_name="Codex Desktop Linux ${codex_app_version} for Ubuntu 20.04/22.04/24.04"
 
-          if [ -n "$CODEX_BUILD_NUMBER" ]; then
-            RELEASE_NAME="${RELEASE_NAME} (build ${CODEX_BUILD_NUMBER}, Electron ${ELECTRON_VERSION})"
+          if [ -n "$codex_build_number" ]; then
+            release_name="${release_name} (build ${codex_build_number}, Electron ${electron_version})"
           else
-            RELEASE_NAME="${RELEASE_NAME} (Electron ${ELECTRON_VERSION})"
+            release_name="${release_name} (Electron ${electron_version})"
           fi
 
           {
-            echo "CODEX_APP_VERSION=$CODEX_APP_VERSION"
-            echo "CODEX_BUILD_NUMBER=$CODEX_BUILD_NUMBER"
-            echo "ELECTRON_VERSION=$ELECTRON_VERSION"
-            echo "RELEASE_TAG=$RELEASE_TAG"
-            echo "RELEASE_NAME=$RELEASE_NAME"
-          } >> "$GITHUB_ENV"
+            echo "codex_app_version=$codex_app_version"
+            echo "codex_build_number=$codex_build_number"
+            echo "electron_version=$electron_version"
+            echo "release_tag=$release_tag"
+            echo "release_name=$release_name"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Skip scheduled rebuild when release exists
         id: release_check
         if: github.event_name == 'schedule'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.collect_metadata.outputs.release_tag }}
         run: |
           python3 - <<'PY'
           import json
@@ -129,38 +140,152 @@ jobs:
               handle.write("skip_build=true\n")
           PY
 
-      - name: Apply committed patch bundle
+      - name: Generate release notes
         if: github.event_name != 'schedule' || steps.release_check.outputs.skip_build != 'true'
+        env:
+          CODEX_APP_VERSION: ${{ steps.collect_metadata.outputs.codex_app_version }}
+          CODEX_BUILD_NUMBER: ${{ steps.collect_metadata.outputs.codex_build_number }}
+          ELECTRON_VERSION: ${{ steps.collect_metadata.outputs.electron_version }}
+          RELEASE_TAG: ${{ steps.collect_metadata.outputs.release_tag }}
         run: |
-          python3 scripts/apply_patch_bundle.py \
-            --bundle-dir patches/codex-desktop \
-            --asar codex-app/resources/app.asar \
-            --work-root patch-work/ci
+          previous_tag="$(git tag --list 'codex-desktop-linux-v*' --sort=-creatordate | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)"
+
+          if [ -n "$previous_tag" ]; then
+            commit_list="$(git log --pretty=format:'- %h %s (%an)' "${previous_tag}..HEAD")"
+          else
+            commit_list="$(git log -n 20 --pretty=format:'- %h %s (%an)')"
+          fi
+
+          if [ -z "$commit_list" ]; then
+            commit_list="- No recent commits found."
+          fi
+
+          {
+            echo "# ${RELEASE_TAG}"
+            echo
+            echo "- Codex Desktop: ${CODEX_APP_VERSION}"
+            if [ -n "$CODEX_BUILD_NUMBER" ]; then
+              echo "- Build number: ${CODEX_BUILD_NUMBER}"
+            fi
+            echo "- Electron: ${ELECTRON_VERSION}"
+            echo "- Artifacts: Ubuntu 20.04, Ubuntu 22.04, Ubuntu 24.04"
+            echo
+            if [ -n "$previous_tag" ]; then
+              echo "## Commits since ${previous_tag}"
+            else
+              echo "## Recent commits"
+            fi
+            echo
+            printf '%s\n' "$commit_list"
+          } > release-notes.md
+
+      - name: Upload release notes artifact
+        if: github.event_name != 'schedule' || steps.release_check.outputs.skip_build != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  build-release:
+    needs: prepare-release
+    if: github.event_name != 'schedule' || needs.prepare-release.outputs.skip_build != 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu_version:
+          - "20.04"
+          - "22.04"
+          - "24.04"
+    container:
+      image: ubuntu:${{ matrix.ubuntu_version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install build dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y software-properties-common
+          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          apt-get update
+          apt-get install -y \
+            build-essential \
+            ca-certificates \
+            curl \
+            g++-11 \
+            gcc-11 \
+            git \
+            python3 \
+            tar \
+            unzip \
+            xz-utils
+
+      - name: Build Linux app from latest DMG
+        env:
+          npm_config_python: /usr/bin/python3
+        run: |
+          rm -f Codex.dmg
+          chmod +x install.sh
+          ./install.sh
 
       - name: Build Debian package
-        if: github.event_name != 'schedule' || steps.release_check.outputs.skip_build != 'true'
         run: |
           chmod +x build-deb.sh
           ./build-deb.sh
 
-      - name: Collect Debian package metadata
-        if: github.event_name != 'schedule' || steps.release_check.outputs.skip_build != 'true'
+      - name: Rename Debian package for release
+        env:
+          UBUNTU_VERSION: ${{ matrix.ubuntu_version }}
         run: |
-          echo "DEB_PATH=$(find dist -maxdepth 1 -type f -name '*.deb' | head -n 1)" >> "$GITHUB_ENV"
+          deb_source="$(find dist -maxdepth 1 -type f -name '*.deb' | head -n 1)"
+          deb_basename="$(basename "$deb_source" .deb)"
+          release_dir="dist/release"
+          deb_release_path="${release_dir}/${deb_basename}_ubuntu${UBUNTU_VERSION}.deb"
+          mkdir -p "$release_dir"
+          cp "$deb_source" "$deb_release_path"
+          echo "DEB_RELEASE_PATH=$deb_release_path" >> "$GITHUB_ENV"
 
       - name: Upload Debian artifact
-        if: github.event_name != 'schedule' || steps.release_check.outputs.skip_build != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: codex-desktop-linux-${{ env.CODEX_APP_VERSION }}-ubuntu20.04-deb
-          path: ${{ env.DEB_PATH }}
+          name: codex-desktop-linux-${{ needs.prepare-release.outputs.codex_app_version }}-ubuntu${{ matrix.ubuntu_version }}-deb
+          path: ${{ env.DEB_RELEASE_PATH }}
+
+  publish-release:
+    needs:
+      - prepare-release
+      - build-release
+    if: github.event_name != 'schedule' || needs.prepare-release.outputs.skip_build != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Debian artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: codex-desktop-linux-*-deb
+          merge-multiple: true
+
+      - name: Download release notes artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes
 
       - name: Publish GitHub release
-        if: github.event_name != 'schedule' || steps.release_check.outputs.skip_build != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_NAME }}
-          files: ${{ env.DEB_PATH }}
-          generate_release_notes: true
+          tag_name: ${{ needs.prepare-release.outputs.release_tag }}
+          name: ${{ needs.prepare-release.outputs.release_name }}
+          body_path: release-notes/release-notes.md
+          files: release-assets/*
           overwrite_files: true

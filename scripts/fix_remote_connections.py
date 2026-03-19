@@ -215,7 +215,7 @@ def print_local_summary(assets_dir: str, backup_dir: Path) -> None:
     print('[local] deb webview patched')
     print(f'  assets: {assets_dir}')
     print(f'  backup: {backup_dir}')
-    print('  result: dedicated Connections page kept, General helper row removed')
+    print('  result: Connections settings entry enabled')
 
 
 def print_remote_summary(host: str, fixed: dict, validated: dict) -> None:

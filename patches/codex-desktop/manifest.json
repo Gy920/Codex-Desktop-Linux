@@ -33,34 +33,34 @@
     {
       "name": "linux-picker-allow-file-selection",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "const (\\w+)=\\[\"openDirectory\",\"createDirectory\"\\];await this\\.shouldShowHiddenFilesInPicker\\(\\)&&\\1\\.push\\(\"showHiddenFiles\"\\);const (\\w+)=await (\\w+)\\.dialog\\.showOpenDialog\\(\\{properties:\\1,title:\"Select Project Root\"\\}\\),(\\w+)=\\2\\.filePaths\\?\\.\\[0\\];",
-      "replace": "const \\1=process.platform===\"linux\"?[\"openFile\",\"openDirectory\",\"createDirectory\"]:[\"openDirectory\",\"createDirectory\"];await this.shouldShowHiddenFilesInPicker()&&\\1.push(\"showHiddenFiles\");const \\2=await \\3.dialog.showOpenDialog({properties:\\1,title:\"Select Project Root\"}),\\4=\\2.filePaths?.[0];",
+      "find_regex": "(?:const|let) (\\w+)=\\[`openDirectory`,`createDirectory`\\];await this\\.shouldShowHiddenFilesInPicker\\(\\)&&\\1\\.push\\(`showHiddenFiles`\\);(?:const|let) (\\w+)=await (\\w+)\\.dialog\\.showOpenDialog\\(\\{properties:\\1,title:`Select Project Root`\\}\\),(\\w+)=\\2\\.filePaths\\?\\.\\[0\\];",
+      "replace": "let \\1=process.platform===`linux`?[`openFile`,`openDirectory`,`createDirectory`]:[`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);let \\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];",
       "count": 2,
-      "already_contains": "process.platform===\"linux\"?[\"openFile\",\"openDirectory\",\"createDirectory\"]:[\"openDirectory\",\"createDirectory\"]"
+      "already_contains": "process.platform===`linux`?[`openFile`,`openDirectory`,`createDirectory`]:[`openDirectory`,`createDirectory`]"
     },
     {
       "name": "linux-picker-resolve-parent-directory",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{const (\\w+)=Qe\\(e,this\\.host\\);return\\(await (\\w+)\\.stat\\(\\1\\)\\)\\.isDirectory\\(\\)\\?(\\w+)\\.resolve\\(\\1\\):null\\}catch\\((\\w+)\\)\\{return (\\w+)\\(\\)\\.warning\\(\"Failed to stat workspace root\",\\{safe:\\{\\},sensitive:\\{error:\\4\\}\\}\\),null\\}\\}",
-      "replace": "async resolveWorkspaceRoot(e){try{const \\1=Qe(e,this.host),i=await \\2.stat(\\1);if(i.isDirectory())return \\3.resolve(\\1);if(i.isFile()){const n=\\3.dirname(\\1),o=await \\2.stat(n);if(o.isDirectory())return \\3.resolve(n)}return null}catch(\\4){return \\5().warning(\"Failed to stat workspace root\",{safe:{},sensitive:{error:\\4}}),null}}",
+      "find_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{let (\\w+)=\\w+\\(e,this\\.host\\);return\\(await\\(0,(\\w+)\\.stat\\)\\(\\1\\)\\)\\.isDirectory\\(\\)\\?\\(0,(\\w+)\\.resolve\\)\\(\\1\\):null\\}catch\\((\\w+)\\)\\{return (\\w+)\\(\\)\\.warning\\(`Failed to stat workspace root`,\\{safe:\\{\\},sensitive:\\{error:\\4\\}\\}\\),null\\}\\}",
+      "replace": "async resolveWorkspaceRoot(e){try{let \\1=Yt(e,this.host),i=await(0,\\2.stat)(\\1);if(i.isDirectory())return(0,\\3.resolve)(\\1);if(i.isFile()){let n=(0,\\3.dirname)(\\1),o=await(0,\\2.stat)(n);if(o.isDirectory())return(0,\\3.resolve)(n)}return null}catch(\\4){return \\5().warning(`Failed to stat workspace root`,{safe:{},sensitive:{error:\\4}}),null}}",
       "count": 1,
-      "already_contains": "if(i.isFile()){const n="
+      "already_contains": "if(i.isFile()){let n=(0,"
     },
     {
       "name": "open-file-linux-fallback-file-manager",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "if\\((\\w+)=(\\w+)\\(\\{target:\\1,hasExplicitTarget:(\\w+),platform:process\\.platform\\}\\),!\\1\\)throw new Error\\(\"No available open target\"\\);",
-      "replace": "if(\\1=\\2({target:\\1,hasExplicitTarget:\\3,platform:process.platform}),!\\1){if(process.platform===\"linux\")\\1=\"fileManager\";else throw new Error(\"No available open target\")}",
+      "find_regex": "if\\((\\w+)=\\w+\\(\\{target:\\1,hasExplicitTarget:(\\w+),platform:process\\.platform\\}\\),!\\1\\)throw Error\\(`No available open target`\\);",
+      "replace": "if(\\1=Dn({target:\\1,hasExplicitTarget:\\2,platform:process.platform}),!\\1){if(process.platform===`linux`)\\1=`fileManager`;else throw Error(`No available open target`)}",
       "count": 1,
-      "already_contains": "process.platform===\"linux\")"
+      "already_contains": "process.platform===`linux`"
     },
     {
       "name": "skills-clone-without-sparse",
-      "glob": ".vite/build/main-*.js",
-      "find_regex": "\\[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",\"--sparse\",(\\w+),(\\w+)\\]",
-      "replace": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\",\\1,\\2]",
+      "glob": ".vite/build/deeplinks-*.js",
+      "find_regex": "\\[`clone`,`--depth`,`1`,`--filter=blob:none`,`--sparse`,(\\w+),(\\w+)\\]",
+      "replace": "[`clone`,`--depth`,`1`,`--filter=blob:none`,\\1,\\2]",
       "count": 1,
-      "already_contains": "[\"clone\",\"--depth\",\"1\",\"--filter=blob:none\","
+      "already_contains": "[`clone`,`--depth`,`1`,`--filter=blob:none`,"
     },
     {
       "name": "enable-remote-project-setup-ui",
@@ -81,26 +81,16 @@
     {
       "name": "inject-connections-into-visible-settings-sections",
       "glob": "webview/assets/index-*.js",
-      "find": "t[7]=a,t[8]=o,t[9]=r,t[10]=e):e=t[10],l=ql.filter(e);let i;",
-      "replace": "t[7]=a,t[8]=o,t[9]=r,t[10]=e):e=t[10],l=ql.filter(e),l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;",
+      "find_regex": "t\\[7\\]=a,t\\[8\\]=o,t\\[9\\]=r,t\\[10\\]=e\\):e=t\\[10\\],l=(\\w+)\\.filter\\(e\\);let i;",
+      "replace": "t[7]=a,t[8]=o,t[9]=r,t[10]=e):e=t[10],l=\\1.filter(e),l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;",
       "count": 1,
-      "already_contains": "l=ql.filter(e),l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;"
+      "already_contains": "l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;"
     },
     {
-      "name": "mcp-settings-entry-opens-connections",
+      "name": "always-show-profile-settings-entry",
       "glob": "webview/assets/index-*.js",
-      "find": "window.open(e.externalUrl,`_blank`,`noopener,noreferrer`);return}t||i(e.slug)",
-      "replace": "window.open(e.externalUrl,`_blank`,`noopener,noreferrer`);return}t||i(e.slug===`mcp-settings`?`connections`:e.slug)",
-      "count": 1,
-      "already_contains": "t||i(e.slug===`mcp-settings`?`connections`:e.slug)"
-    },
-    {
-      "name": "mcp-settings-page-renders-remote-connections",
-      "glob": "webview/assets/index-*.js",
-      "find": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./mcp-settings-DrgCUGND.js`).then(e=>({default:e.McpSettings})),__vite__mapDeps([100,2,6,7,4,3,8,9,20,18,19,21,22,23,24,25,13,26,27,53,101,67,29,88,69,86,102,31,94,74,95,96,38,39]),import.meta.url)),",
-      "replace": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./remote-connections-settings-BY9N7Qjx.js`).then(e=>({default:e.RemoteConnectionsSettings})),__vite__mapDeps([103,2,6,7,4,3,8,9,20,18,19,21,24,25,13,26,27,104,68,29,31,96,105,38]),import.meta.url)),",
-      "count": 1,
-      "already_contains": "\"mcp-settings\":(0,Z.lazy)(()=>v(()=>import(`./remote-connections-settings-BY9N7Qjx.js`).then(e=>({default:e.RemoteConnectionsSettings})),__vite__mapDeps([103,2,6,7,4,3,8,9,20,18,19,21,24,25,13,26,27,104,68,29,31,96,105,38]),import.meta.url)),"
+      "find_regex": "Ee=(?:[A-Za-z_$][\\w$]*&&)?(?:\\()?0,\\$\\.jsx\\)\\(([A-Za-z_$][\\w$]*,\\{LeftIcon:[A-Za-z_$][\\w$]*,onClick:\\(\\)=>\\{[A-Za-z_$][\\w$]*\\(!1\\),[A-Za-z_$][\\w$]*\\(`/settings/general-settings`,\\{state:[A-Za-z_$][\\w$]*\\}\\)\\},children:\\(0,\\$\\.jsx\\)\\([A-Za-z_$][\\w$]*,\\{id:`codex\\.profileDropdown\\.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`\\}\\)\\})\\)",
+      "replace": "Ee=(0,$.jsx)(\\1)"
     }
   ]
 }
