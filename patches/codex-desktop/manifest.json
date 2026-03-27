@@ -60,7 +60,8 @@
       "find_regex": "\\[`clone`,`--depth`,`1`,`--filter=blob:none`,`--sparse`,(\\w+),(\\w+)\\]",
       "replace": "[`clone`,`--depth`,`1`,`--filter=blob:none`,\\1,\\2]",
       "count": 1,
-      "already_contains": "[`clone`,`--depth`,`1`,`--filter=blob:none`,"
+      "already_contains": "[`clone`,`--depth`,`1`,`--filter=blob:none`,",
+      "allow_missing_files": true
     },
     {
       "name": "enable-remote-project-setup-ui",

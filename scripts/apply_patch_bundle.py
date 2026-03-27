@@ -21,6 +21,8 @@ def copy_tree(src: Path, dst: Path) -> None:
 def apply_rule(rule: dict, extract_dir: Path, *, ignore_count: bool = False) -> None:
     matched_files = sorted(extract_dir.glob(rule["glob"]))
     if not matched_files:
+        if rule.get("allow_missing_files"):
+            return
         raise SystemExit(f"No files matched {rule['glob']} for {rule['name']}")
 
     total_replacements = 0
@@ -51,6 +53,8 @@ def apply_rule(rule: dict, extract_dir: Path, *, ignore_count: bool = False) -> 
     expected = rule.get("count")
     if total_replacements == 0:
         if already_present:
+            return
+        if rule.get("optional"):
             return
         raise SystemExit(f"Rule did not match: {rule['name']}")
     if not ignore_count and expected is not None and total_replacements != expected:
