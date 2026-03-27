@@ -64,11 +64,11 @@
     },
     {
       "name": "enable-remote-project-setup-ui",
-      "glob": "webview/assets/statsig-*.js",
-      "find": "function De(e){return Le(),(0,Ce.useGateValue)(e)}",
-      "replace": "function De(e){let t=(Le(),(0,Ce.useGateValue)(e));return e===`4114442250`?!0:t}",
+      "glob": "webview/assets/index-*.js",
+      "find_regex": "([A-Za-z_$][\\w$]*)=Os\\(`4114442250`\\)",
+      "replace": "\\1=!0",
       "count": 1,
-      "already_contains": "e===`4114442250`?!0:t"
+      "already_contains_regex": "[A-Za-z_$][\\w$]*=!0,[A-Za-z_$][\\w$]*=Os\\(`505458`\\)"
     },
     {
       "name": "show-connections-settings-entry",
