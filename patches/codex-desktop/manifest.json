@@ -65,11 +65,11 @@
     },
     {
       "name": "enable-remote-project-setup-ui",
-      "glob": "webview/assets/index-*.js",
-      "find_regex": "([A-Za-z_$][\\w$]*)=Os\\(`4114442250`\\)",
-      "replace": "\\1=!0",
+      "glob": "webview/assets/statsig-*.js",
+      "find_regex": "([A-Za-z_$][\\w$]*)\\.NoopEvaluationsClient\\.checkGate\\(([A-Za-z_$][\\w$]*),([A-Za-z_$][\\w$]*)\\)\\):([A-Za-z_$][\\w$]*)\\.checkGate\\(\\2,\\3\\)",
+      "replace": "\\1.NoopEvaluationsClient.checkGate(\\2,\\3)):\\2===`4114442250`?!0:\\4.checkGate(\\2,\\3)",
       "count": 1,
-      "already_contains_regex": "[A-Za-z_$][\\w$]*=!0,[A-Za-z_$][\\w$]*=Os\\(`505458`\\)"
+      "already_contains": "===`4114442250`?!0:"
     },
     {
       "name": "show-connections-settings-entry",
