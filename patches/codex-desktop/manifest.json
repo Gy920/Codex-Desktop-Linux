@@ -77,7 +77,8 @@
       "find": "case`skills-settings`:return r===`extension`;case`connections`:return r===`electron`&&a;case`usage`:return o;",
       "replace": "case`skills-settings`:return r===`extension`;case`connections`:return!0;case`usage`:return o;",
       "count": 1,
-      "already_contains": "case`skills-settings`:return r===`extension`;case`connections`:return!0;case`usage`:return o;"
+      "already_contains": "case`skills-settings`:return r===`extension`;case`connections`:return!0;case`usage`:return o;",
+      "optional": true
     },
     {
       "name": "inject-connections-into-visible-settings-sections",
@@ -85,13 +86,15 @@
       "find_regex": "t\\[7\\]=a,t\\[8\\]=o,t\\[9\\]=r,t\\[10\\]=e\\):e=t\\[10\\],l=(\\w+)\\.filter\\(e\\);let i;",
       "replace": "t[7]=a,t[8]=o,t[9]=r,t[10]=e):e=t[10],l=\\1.filter(e),l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;",
       "count": 1,
-      "already_contains": "l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;"
+      "already_contains": "l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;",
+      "optional": true
     },
     {
       "name": "always-show-profile-settings-entry",
       "glob": "webview/assets/index-*.js",
       "find_regex": "Ee=(?:[A-Za-z_$][\\w$]*&&)?(?:\\()?0,\\$\\.jsx\\)\\(([A-Za-z_$][\\w$]*,\\{LeftIcon:[A-Za-z_$][\\w$]*,onClick:\\(\\)=>\\{[A-Za-z_$][\\w$]*\\(!1\\),[A-Za-z_$][\\w$]*\\(`/settings/general-settings`,\\{state:[A-Za-z_$][\\w$]*\\}\\)\\},children:\\(0,\\$\\.jsx\\)\\([A-Za-z_$][\\w$]*,\\{id:`codex\\.profileDropdown\\.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`\\}\\)\\})\\)",
-      "replace": "Ee=(0,$.jsx)(\\1)"
+      "replace": "Ee=(0,$.jsx)(\\1)",
+      "optional": true
     }
   ]
 }
