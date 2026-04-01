@@ -79,8 +79,19 @@ get_sevenzip_major_version() {
     echo "${version%%.*}"
 }
 
+download_with_retry() {
+    local dest_path="$1"
+    local url="$2"
+
+    curl -L --progress-bar --fail \
+        --retry 5 --retry-delay 2 \
+        --max-time 300 --connect-timeout 30 \
+        -o "$dest_path" "$url"
+}
+
 download_sevenzip() {
-    local sevenzip_arch cache_dir archive_path url
+    local sevenzip_arch cache_dir archive_path filename url
+    local -a urls
 
     case "$ARCH" in
         x86_64)  sevenzip_arch="x64" ;;
@@ -99,13 +110,26 @@ download_sevenzip() {
 
     mkdir -p "$cache_dir"
     archive_path="$WORK_DIR/7zip.tar.xz"
-    url="https://www.7-zip.org/a/7z${SEVENZIP_VERSION_TAG}-linux-${sevenzip_arch}.tar.xz"
+    filename="7z${SEVENZIP_VERSION_TAG}-linux-${sevenzip_arch}.tar.xz"
+    urls=(
+        "https://7-zip.org/a/$filename"
+        "https://www.7-zip.org/a/$filename"
+        "https://sourceforge.net/projects/sevenzip/files/7-Zip/$SEVENZIP_VERSION/$filename/download"
+    )
 
     info "Downloading official 7-Zip ${SEVENZIP_VERSION} for Linux..."
 
-    if ! curl -L --progress-bar --max-time 300 --connect-timeout 30 \
-            -o "$archive_path" "$url"; then
-        error "Failed to download 7-Zip from $url"
+    for url in "${urls[@]}"; do
+        info "Trying 7-Zip source: $url"
+        rm -f "$archive_path"
+        if download_with_retry "$archive_path" "$url"; then
+            break
+        fi
+        warn "Failed to download 7-Zip from $url"
+    done
+
+    if [ ! -s "$archive_path" ]; then
+        error "Failed to download 7-Zip from all known sources"
     fi
 
     tar -xJf "$archive_path" -C "$cache_dir" >&2 || \
@@ -275,7 +299,9 @@ get_dmg() {
     local dmg_url="https://persistent.oaistatic.com/codex-app-prod/Codex.dmg"
     info "URL: $dmg_url"
 
-    if ! curl -L --progress-bar --max-time 600 --connect-timeout 30 \
+    if ! curl -L --progress-bar --fail \
+            --retry 5 --retry-delay 2 \
+            --max-time 600 --connect-timeout 30 \
             -o "$dmg_dest" "$dmg_url"; then
         rm -f "$dmg_dest"
         error "Download failed. Download manually and place as: $dmg_dest"
@@ -388,7 +414,12 @@ download_electron() {
 
     local url="https://github.com/electron/electron/releases/download/v${ELECTRON_VERSION}/electron-v${ELECTRON_VERSION}-linux-${electron_arch}.zip"
 
-    curl -L --progress-bar -o "$WORK_DIR/electron.zip" "$url"
+    if ! curl -L --progress-bar --fail \
+            --retry 5 --retry-delay 2 \
+            --max-time 600 --connect-timeout 30 \
+            -o "$WORK_DIR/electron.zip" "$url"; then
+        error "Failed to download Electron from $url"
+    fi
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
     unzip -qo "$WORK_DIR/electron.zip"
