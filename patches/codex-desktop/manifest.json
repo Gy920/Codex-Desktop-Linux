@@ -31,12 +31,21 @@
       "already_contains": "--font-mono-default:\"Codex Mono\",ui-monospace"
     },
     {
+      "name": "linux-picker-open-directory-first-on-updated-bundles",
+      "glob": ".vite/build/main-*.js",
+      "find_regex": "let (\\w+)=process\\.platform===`linux`\\?\\[`openFile`,`openDirectory`,`createDirectory`\\]:\\[`openDirectory`,`createDirectory`\\];await this\\.shouldShowHiddenFilesInPicker\\(\\)&&\\1\\.push\\(`showHiddenFiles`\\);let (\\w+)=await (\\w+)\\.dialog\\.showOpenDialog\\(\\{properties:\\1,title:`Select Project Root`\\}\\),(\\w+)=\\2\\.filePaths\\?\\.\\[0\\];",
+      "replace": "let \\1=[`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);let \\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];if(process.platform===`linux`&&!\\4){\\1=[`openFile`,`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);\\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];}",
+      "count": 2,
+      "already_contains": "if(process.platform===`linux`&&!",
+      "optional": true
+    },
+    {
       "name": "linux-picker-allow-file-selection",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "(?:const|let) (\\w+)=\\[`openDirectory`,`createDirectory`\\];await this\\.shouldShowHiddenFilesInPicker\\(\\)&&\\1\\.push\\(`showHiddenFiles`\\);(?:const|let) (\\w+)=await (\\w+)\\.dialog\\.showOpenDialog\\(\\{properties:\\1,title:`Select Project Root`\\}\\),(\\w+)=\\2\\.filePaths\\?\\.\\[0\\];",
-      "replace": "let \\1=process.platform===`linux`?[`openFile`,`openDirectory`,`createDirectory`]:[`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);let \\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];",
+      "find_regex": "(?:const|let) (\\w+)=\\[`openDirectory`,`createDirectory`\\];await this\\.shouldShowHiddenFilesInPicker\\(\\)&&\\1\\.push\\(`showHiddenFiles`\\);(?:const|let) (\\w+)=await (\\w+)\\.dialog\\.showOpenDialog\\(\\{properties:\\1,title:`Select Project Root`\\}\\),(\\w+)=\\2\\.filePaths\\?\\.\\[0\\];(?!if\\(process\\.platform===`linux`&&!\\4\\)\\{)",
+      "replace": "let \\1=[`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);let \\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];if(process.platform===`linux`&&!\\4){\\1=[`openFile`,`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);\\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];}",
       "count": 2,
-      "already_contains": "process.platform===`linux`?[`openFile`,`openDirectory`,`createDirectory`]:[`openDirectory`,`createDirectory`]"
+      "already_contains": "if(process.platform===`linux`&&!"
     },
     {
       "name": "linux-picker-resolve-parent-directory",

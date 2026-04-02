@@ -13,8 +13,8 @@ machines reapply the same patch set after an app update.
 What this bundle changes:
 
 - prefers bundled `Ubuntu` and `Ubuntu Mono` fonts over Linux fallback fonts
-- keeps the Linux "Select project" flow working even when the file chooser only
-  exposes file selection
+- keeps the Linux "Select project" flow using directory selection first, then
+  falls back to file selection only when the picker fails to return a folder
 - resolves a selected file back to its parent directory
 - forces the built-in remote project setup feature gate on, which also exposes
   the dedicated Connections / remote project entry points wired to that gate
