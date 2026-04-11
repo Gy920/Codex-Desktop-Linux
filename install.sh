@@ -357,8 +357,14 @@ build_native_modules() {
     CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" npm install "electron@$ELECTRON_VERSION" --save-dev --ignore-scripts 2>&1 >&2
     CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" npm install "better-sqlite3@$bs3_ver" "node-pty@$npty_ver" --ignore-scripts 2>&1 >&2
 
-    info "Compiling for Electron v$ELECTRON_VERSION (this takes ~1 min)..."
-    CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force 2>&1 >&2
+    rm -rf \
+        "$build_dir/node_modules/better-sqlite3/build" \
+        "$build_dir/node_modules/node-pty/build"
+
+    info "Compiling native modules from source for Electron v$ELECTRON_VERSION (this takes ~1 min)..."
+    npm_config_build_from_source=true \
+    CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" \
+        npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force --build-from-source --disable-pre-gyp-copy 2>&1 >&2
 
     info "Native modules built successfully"
 

@@ -250,6 +250,51 @@ jobs:
           chmod +x install.sh
           ./install.sh
 
+      - name: Verify Ubuntu 20.04 ABI floor
+        if: matrix.ubuntu_version == '20.04'
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          allowed = (2, 31)
+          targets = [
+              pathlib.Path('codex-app/electron'),
+              pathlib.Path('codex-app/lib/libgcc_s.so.1'),
+              pathlib.Path('codex-app/lib/libstdc++.so.6'),
+              pathlib.Path('codex-app/resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node'),
+              pathlib.Path('codex-app/resources/app.asar.unpacked/node_modules/node-pty/build/Release/pty.node'),
+          ]
+          pattern = re.compile(r'GLIBC_(\d+)\.(\d+)')
+          failures = []
+
+          for target in targets:
+              if not target.exists():
+                  failures.append(f'missing expected file: {target}')
+                  continue
+              output = subprocess.run(
+                  ['objdump', '-T', str(target)],
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              ).stdout
+              versions = {
+                  (int(m.group(1)), int(m.group(2)))
+                  for m in pattern.finditer(output)
+              }
+              bad = sorted(v for v in versions if v > allowed)
+              if bad:
+                  failures.append(
+                      f'{target} requires newer GLIBC symbols: ' + ', '.join(f'{major}.{minor}' for major, minor in bad)
+                  )
+
+          if failures:
+              print('\n'.join(failures), file=sys.stderr)
+              sys.exit(1)
+          PY
+
       - name: Build Debian package
         run: |
           chmod +x build-deb.sh
