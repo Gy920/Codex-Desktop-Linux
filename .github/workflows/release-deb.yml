@@ -69,14 +69,11 @@ jobs:
           chmod +x install.sh
           ./install.sh
 
-      - name: Archive prepared Linux app
-        run: tar -cf codex-app-prepared.tar codex-app
-
-      - name: Upload prepared Linux app artifact
+      - name: Upload latest DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codex-app-prepared
-          path: codex-app-prepared.tar
+          name: codex-dmg
+          path: Codex.dmg
 
       - name: Collect release metadata
         id: collect_metadata
@@ -224,20 +221,34 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
+          apt-get install -y software-properties-common
+          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          apt-get update
           apt-get install -y \
+            build-essential \
             ca-certificates \
+            curl \
+            g++-11 \
+            gcc-11 \
             git \
             python3 \
-            tar
+            tar \
+            unzip \
+            xz-utils
 
-      - name: Download prepared Linux app artifact
+      - name: Download latest DMG artifact
         uses: actions/download-artifact@v4
         with:
-          name: codex-app-prepared
-          path: prepared-app
+          name: codex-dmg
+          path: downloaded-dmg
 
-      - name: Restore prepared Linux app
-        run: tar -xf prepared-app/codex-app-prepared.tar
+      - name: Build Linux app from downloaded DMG
+        env:
+          npm_config_python: /usr/bin/python3
+        run: |
+          cp downloaded-dmg/Codex.dmg ./Codex.dmg
+          chmod +x install.sh
+          ./install.sh
 
       - name: Build Debian package
         run: |
