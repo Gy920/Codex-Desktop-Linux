@@ -50,8 +50,8 @@
     {
       "name": "linux-picker-resolve-parent-directory",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{let (\\w+)=\\w+\\(e,this\\.host\\);return\\(await\\(0,(\\w+)\\.stat\\)\\(\\1\\)\\)\\.isDirectory\\(\\)\\?\\(0,(\\w+)\\.resolve\\)\\(\\1\\):null\\}catch\\((\\w+)\\)\\{return (\\w+)\\(\\)\\.warning\\(`Failed to stat workspace root`,\\{safe:\\{\\},sensitive:\\{error:\\4\\}\\}\\),null\\}\\}",
-      "replace": "async resolveWorkspaceRoot(e){try{let \\1=Yt(e,this.host),i=await(0,\\2.stat)(\\1);if(i.isDirectory())return(0,\\3.resolve)(\\1);if(i.isFile()){let n=(0,\\3.dirname)(\\1),o=await(0,\\2.stat)(n);if(o.isDirectory())return(0,\\3.resolve)(n)}return null}catch(\\4){return \\5().warning(`Failed to stat workspace root`,{safe:{},sensitive:{error:\\4}}),null}}",
+      "find_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{(?:const|let) (\\w+)=(\\w+)\\(e,this\\.host\\);return\\(await\\s*(?:\\(0,)?(\\w+)\\.stat\\)?\\(\\1\\)\\)\\.isDirectory\\(\\)\\?(?:\\(0,)?(\\w+)\\.resolve\\)?\\(\\1\\):null\\}catch\\((\\w+)\\)\\{return (\\w+)\\(\\)\\.warning\\([`\"]Failed to stat workspace root[`\"],\\{safe:\\{\\},sensitive:\\{error:\\5\\}\\}\\),null\\}\\}",
+      "replace": "async resolveWorkspaceRoot(e){try{let \\1=\\2(e,this.host),i=await(0,\\3.stat)(\\1);if(i.isDirectory())return(0,\\4.resolve)(\\1);if(i.isFile()){let n=(0,\\4.dirname)(\\1),o=await(0,\\3.stat)(n);if(o.isDirectory())return(0,\\4.resolve)(n)}return null}catch(\\5){return \\6().warning(`Failed to stat workspace root`,{safe:{},sensitive:{error:\\5}}),null}}",
       "count": 1,
       "already_contains": "if(i.isFile()){let n=(0,"
     },
