@@ -99,14 +99,6 @@
       "optional": true
     },
     {
-      "name": "inject-gpt-5-4-mini-into-model-list",
-      "glob": "webview/assets/composer-atoms-*.js",
-      "find": "f=e=>{let{data:t}=e,n={models:[]},r=null;return t.forEach(e=>{if(o.useHiddenModels?o.availableModels.has(e.model):!e.hidden){let t=i===`copilot`?[e.supportedReasoningEfforts.find(k)??{reasoningEffort:`medium`,description:`medium effort`}]:[...e.supportedReasoningEfforts];n.models.push({...e,supportedReasoningEfforts:t}),r=e.isDefault?e:r}}),r??=n.models.find(e=>e.model===o.defaultModel)??null,{modelsByType:n,defaultModel:r}}",
-      "replace": "f=e=>{let{data:t}=e,n={models:[]},r=null;return t.forEach(e=>{if(o.useHiddenModels?o.availableModels.has(e.model):!e.hidden){let t=i===`copilot`?[e.supportedReasoningEfforts.find(k)??{reasoningEffort:`medium`,description:`medium effort`}]:[...e.supportedReasoningEfforts];n.models.push({...e,supportedReasoningEfforts:t}),r=e.isDefault?e:r}});let a=t.find(e=>e.model===`gpt-5.4-mini`),s=t.find(e=>e.model===`gpt-5.4`);if(!a&&s&&!n.models.some(e=>e.model===`gpt-5.4-mini`)){let e={...s,model:`gpt-5.4-mini`,name:`GPT-5.4 mini`,displayName:`GPT-5.4 mini`,description:`Smaller frontier agentic coding model.`,hidden:!1,isDefault:!1},t=i===`copilot`?[e.supportedReasoningEfforts.find(k)??{reasoningEffort:`medium`,description:`medium effort`}]:[...e.supportedReasoningEfforts];n.models.push({...e,supportedReasoningEfforts:t})}r??=n.models.find(e=>e.model===o.defaultModel)??null,{modelsByType:n,defaultModel:r}}",
-      "count": 3,
-      "already_contains": "name:`GPT-5.4 mini`,displayName:`GPT-5.4 mini`,description:`Smaller frontier agentic coding model.`"
-    },
-    {
       "name": "always-show-profile-settings-entry",
       "glob": "webview/assets/index-*.js",
       "find_regex": "Ee=(?:[A-Za-z_$][\\w$]*&&)?(?:\\()?0,\\$\\.jsx\\)\\(([A-Za-z_$][\\w$]*,\\{LeftIcon:[A-Za-z_$][\\w$]*,onClick:\\(\\)=>\\{[A-Za-z_$][\\w$]*\\(!1\\),[A-Za-z_$][\\w$]*\\(`/settings/general-settings`,\\{state:[A-Za-z_$][\\w$]*\\}\\)\\},children:\\(0,\\$\\.jsx\\)\\([A-Za-z_$][\\w$]*,\\{id:`codex\\.profileDropdown\\.settingsPage`,defaultMessage:`Settings`,description:`Menu item to open Codex settings page`\\}\\)\\})\\)",
