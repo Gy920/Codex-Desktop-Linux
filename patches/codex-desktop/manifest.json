@@ -75,10 +75,11 @@
     {
       "name": "disable-prod-sparkle-updater",
       "glob": ".vite/build/main-*.js",
-      "find": ",l=e.S(i),u=e.c.shouldIncludeSparkle(i,process.platform,process.env),d=e.c.allowDevtools(i),f=i===e.c.Dev||i===e.c.Agent,",
-      "replace": ",l=e.S(i),u=!1,d=e.c.allowDevtools(i),f=i===e.c.Dev||i===e.c.Agent,",
+      "find_regex": "([A-Za-z_$][\\w$]*)=(?:[A-Za-z_$][\\w$]*\\.)?shouldIncludeSparkle\\([^)]*\\)",
+      "replace": "\\1=!1",
       "count": 1,
-      "already_contains": ",l=e.S(i),u=!1,d=e.c.allowDevtools(i),f=i===e.c.Dev||i===e.c.Agent,"
+      "already_contains_regex": "([A-Za-z_$][\\w$]*)=!1",
+      "optional": true
     },
     {
       "name": "disable-prod-sparkle-updater-alt",
