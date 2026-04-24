@@ -16,8 +16,15 @@ What this bundle changes:
 - keeps the Linux "Select project" flow using directory selection first, then
   falls back to file selection only when the picker fails to return a folder
 - resolves a selected file back to its parent directory
-- forces the built-in remote project setup feature gate on, which also exposes
-  the dedicated Connections / remote project entry points wired to that gate
+- disables the packaged Sparkle / install-update path inside the Electron main
+  bundle so prod update prompts do not hard-block the patched Linux build
+- overrides selected Statsig gates in the renderer to keep hotkey-window
+  available while forcing the app-sunset gate off
+- injects a fixed set of desktop feature defaults into both main-thread startup
+  and renderer feature overrides, including `artifact`, `artifactsPane`,
+  `browserPane`, `ambientSuggestions`, `avatarOverlay`, `multiwindow`,
+  `projectlessThreads`, `general_analytics`, `js_repl`, `multi_agent_v2`,
+  `realtime_conversation`, `tool_search`, `undo`, and `fast_mode`
 - removes the `git clone --sparse` flag from recommended-skills bootstrap
 
 Expected local workflow after updating Codex Desktop:
@@ -31,5 +38,7 @@ Notes:
 - The bundled fonts make Latin UI rendering deterministic across Linux
   machines. CJK glyphs still fall back to the system font stack unless more
   fallback fonts are added to this bundle later.
+- The prod feature/runtime flags above are injected in code at runtime. This
+  patch bundle does not edit the user's `~/.codex/config.toml`.
 - The manifest targets the current bundle structure, so a future Codex release
   may need small manifest updates before reapplying cleanly.

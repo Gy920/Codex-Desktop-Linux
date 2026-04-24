@@ -19,7 +19,7 @@
       "glob": "webview/assets/*.css",
       "find": "--font-mono:var(--vscode-editor-font-family,var(--font-mono-default));",
       "replace": "--font-mono:var(--vscode-editor-font-family,\"Codex Mono\",var(--font-mono-default));",
-      "count": 1,
+      "count": [1, 2],
       "already_contains": "--font-mono:var(--vscode-editor-font-family,\"Codex Mono\",var(--font-mono-default));"
     },
     {
@@ -44,7 +44,7 @@
       "glob": ".vite/build/main-*.js",
       "find_regex": "(?:const|let) (\\w+)=\\[`openDirectory`,`createDirectory`\\];await this\\.shouldShowHiddenFilesInPicker\\(\\)&&\\1\\.push\\(`showHiddenFiles`\\);(?:const|let) (\\w+)=await (\\w+)\\.dialog\\.showOpenDialog\\(\\{properties:\\1,title:`Select Project Root`\\}\\),(\\w+)=\\2\\.filePaths\\?\\.\\[0\\];(?!if\\(process\\.platform===`linux`&&!\\4\\)\\{)",
       "replace": "let \\1=[`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);let \\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];if(process.platform===`linux`&&!\\4){\\1=[`openFile`,`openDirectory`,`createDirectory`];await this.shouldShowHiddenFilesInPicker()&&\\1.push(`showHiddenFiles`);\\2=await \\3.dialog.showOpenDialog({properties:\\1,title:`Select Project Root`}),\\4=\\2.filePaths?.[0];}",
-      "count": 2,
+      "count": [1, 2],
       "already_contains": "if(process.platform===`linux`&&!"
     },
     {
@@ -73,29 +73,89 @@
       "allow_missing_files": true
     },
     {
-      "name": "enable-remote-project-setup-ui",
-      "glob": "webview/assets/statsig-*.js",
-      "find_regex": "([A-Za-z_$][\\w$]*)\\.NoopEvaluationsClient\\.checkGate\\(([A-Za-z_$][\\w$]*),([A-Za-z_$][\\w$]*)\\)\\):([A-Za-z_$][\\w$]*)\\.checkGate\\(\\2,\\3\\)",
-      "replace": "\\1.NoopEvaluationsClient.checkGate(\\2,\\3)):\\2===`4114442250`?!0:\\4.checkGate(\\2,\\3)",
+      "name": "disable-prod-sparkle-updater",
+      "glob": ".vite/build/main-*.js",
+      "find": ",s=Nd(e),c=a.BuildFlavor.shouldIncludeSparkle(e,process.platform,process.env),l=a.BuildFlavor.allowDevtools(e),u=e===a.BuildFlavor.Dev||e===a.BuildFlavor.Agent,",
+      "replace": ",s=Nd(e),c=!1,l=a.BuildFlavor.allowDevtools(e),u=e===a.BuildFlavor.Dev||e===a.BuildFlavor.Agent,",
       "count": 1,
-      "already_contains": "===`4114442250`?!0:"
+      "already_contains": ",s=Nd(e),c=!1,l=a.BuildFlavor.allowDevtools(e),u=e===a.BuildFlavor.Dev||e===a.BuildFlavor.Agent,"
     },
     {
-      "name": "show-connections-settings-entry",
-      "glob": "webview/assets/index-*.js",
-      "find": "case`skills-settings`:return r===`extension`;case`connections`:return r===`electron`&&a;case`usage`:return o;",
-      "replace": "case`skills-settings`:return r===`extension`;case`connections`:return!0;case`usage`:return o;",
+      "name": "disable-prod-sparkle-updater-alt",
+      "glob": ".vite/build/main-*.js",
+      "find": "l=e.S(i),u=e.c.shouldIncludeSparkle(i,process.platform,process.env),d=e.c.shouldIncludeUpdater(i,process.platform,process.env),f=e.c.allowDevtools(i),",
+      "replace": "l=e.S(i),u=!1,d=!1,f=e.c.allowDevtools(i),",
       "count": 1,
-      "already_contains": "case`skills-settings`:return r===`extension`;case`connections`:return!0;case`usage`:return o;",
+      "already_contains": "l=e.S(i),u=!1,d=!1,f=e.c.allowDevtools(i),",
       "optional": true
     },
     {
-      "name": "inject-connections-into-visible-settings-sections",
-      "glob": "webview/assets/index-*.js",
-      "find_regex": "t\\[7\\]=a,t\\[8\\]=o,t\\[9\\]=r,t\\[10\\]=e\\):e=t\\[10\\],l=(\\w+)\\.filter\\(e\\);let i;",
-      "replace": "t[7]=a,t[8]=o,t[9]=r,t[10]=e):e=t[10],l=\\1.filter(e),l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;",
+      "name": "disable-install-app-update-handler",
+      "glob": ".vite/build/main-*.js",
+      "find": "case\"install-app-update\":{this.sparkleManager.installUpdatesIfAvailable();break}",
+      "replace": "case\"install-app-update\":{break}",
       "count": 1,
-      "already_contains": "l.some(e=>e.slug===`connections`)||l.push({slug:`connections`});let i;",
+      "already_contains": "case\"install-app-update\":{break}"
+    },
+    {
+      "name": "disable-install-app-update-handler-alt",
+      "glob": ".vite/build/main-*.js",
+      "find": "case`install-app-update`:this.sparkleManager.installUpdatesIfAvailable();break;",
+      "replace": "case`install-app-update`:break;",
+      "count": 1,
+      "already_contains": "case`install-app-update`:break;",
+      "optional": true
+    },
+    {
+      "name": "inject-prod-feature-defaults-into-thread-start",
+      "glob": ".vite/build/main-*.js",
+      "find": "const t=Cf(this.options.sharedObjectRepository.get(\"statsig_default_enable_features\"),process.platform),i={...e,serviceName:e.serviceName??this.options.defaultServiceName},n=If(i,t);",
+      "replace": "const t=Object.assign({},Cf(this.options.sharedObjectRepository.get(\"statsig_default_enable_features\"),process.platform),{artifact:!0,artifactsPane:!0,ambientSuggestions:!0,avatarOverlay:!0,browserPane:!0,fast_mode:!0,general_analytics:!0,js_repl:!0,multi_agent_v2:!0,multiwindow:!0,projectlessThreads:!0,realtime_conversation:!0,tool_search:!0,undo:!0}),i={...e,serviceName:e.serviceName??this.options.defaultServiceName},n=If(i,t);",
+      "count": 1,
+      "already_contains": "Object.assign({},Cf(this.options.sharedObjectRepository.get(\"statsig_default_enable_features\"),process.platform),{artifact:!0,artifactsPane:!0,ambientSuggestions:!0,avatarOverlay:!0,browserPane:!0,fast_mode:!0,general_analytics:!0,js_repl:!0,multi_agent_v2:!0,multiwindow:!0,projectlessThreads:!0,realtime_conversation:!0,tool_search:!0,undo:!0})"
+    },
+    {
+      "name": "override-prod-statsig-gates",
+      "glob": "webview/assets/statsig-*.js",
+      "find_regex": "([A-Za-z_$][\\w$]*)\\.NoopEvaluationsClient\\.checkGate\\(([A-Za-z_$][\\w$]*),([A-Za-z_$][\\w$]*)\\)\\):([A-Za-z_$][\\w$]*)\\.checkGate\\(\\2,\\3\\)",
+      "replace": "\\1.NoopEvaluationsClient.checkGate(\\2,\\3)):\\2===`1372061905`?!0:\\2===`2929582856`?!1:\\4.checkGate(\\2,\\3)",
+      "count": 1,
+      "already_contains": "===`1372061905`?!0:\\2===`2929582856`?!1:",
+      "already_contains_regex": "===`1372061905`\\?!0:[^:]+===`2929582856`\\?!1:"
+    },
+    {
+      "name": "inject-prod-feature-defaults-into-renderer",
+      "glob": "webview/assets/index-*.js",
+      "find": "n.setDefaultFeatureOverrides(t??null)",
+      "replace": "n.setDefaultFeatureOverrides(Object.assign({},t??{},{artifact:!0,artifactsPane:!0,ambientSuggestions:!0,avatarOverlay:!0,browserPane:!0,fast_mode:!0,general_analytics:!0,js_repl:!0,multi_agent_v2:!0,multiwindow:!0,projectlessThreads:!0,realtime_conversation:!0,tool_search:!0,undo:!0}))",
+      "count": 1,
+      "already_contains": "n.setDefaultFeatureOverrides(Object.assign({},t??{},{artifact:!0,artifactsPane:!0,ambientSuggestions:!0,avatarOverlay:!0,browserPane:!0,fast_mode:!0,general_analytics:!0,js_repl:!0,multi_agent_v2:!0,multiwindow:!0,projectlessThreads:!0,realtime_conversation:!0,tool_search:!0,undo:!0}))"
+    },
+    {
+      "name": "inject-prod-feature-defaults-into-renderer-alt",
+      "glob": "webview/assets/*.js",
+      "find": "bl(`set-default-feature-overrides`,{overrides:n??null})",
+      "replace": "bl(`set-default-feature-overrides`,{overrides:Object.assign({},n??{},{artifact:!0,artifactsPane:!0,ambientSuggestions:!0,avatarOverlay:!0,browserPane:!0,fast_mode:!0,general_analytics:!0,js_repl:!0,multi_agent_v2:!0,multiwindow:!0,projectlessThreads:!0,realtime_conversation:!0,tool_search:!0,undo:!0})})",
+      "count": 1,
+      "already_contains": "bl(`set-default-feature-overrides`,{overrides:Object.assign({},n??{},{artifact:!0,artifactsPane:!0,ambientSuggestions:!0,avatarOverlay:!0,browserPane:!0,fast_mode:!0,general_analytics:!0,js_repl:!0,multi_agent_v2:!0,multiwindow:!0,projectlessThreads:!0,realtime_conversation:!0,tool_search:!0,undo:!0})})",
+      "optional": true
+    },
+    {
+      "name": "disable-app-sunset-gate-alt",
+      "glob": "webview/assets/index-*.js",
+      "find": "?(r=`2929582856`,t[0]=r):r=t[0],xu(r)){",
+      "replace": "?(r=`2929582856`,t[0]=r):r=t[0],!1){",
+      "count": 1,
+      "already_contains": "?(r=`2929582856`,t[0]=r):r=t[0],!1){",
+      "optional": true
+    },
+    {
+      "name": "enable-hotkey-settings-gate-alt",
+      "glob": "webview/assets/general-settings-*.js",
+      "find": "let i=pe(r),a;",
+      "replace": "let i=!0,a;",
+      "count": 1,
+      "already_contains": "let i=!0,a;",
       "optional": true
     },
     {

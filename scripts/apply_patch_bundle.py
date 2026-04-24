@@ -57,10 +57,16 @@ def apply_rule(rule: dict, extract_dir: Path, *, ignore_count: bool = False) -> 
         if rule.get("optional"):
             return
         raise SystemExit(f"Rule did not match: {rule['name']}")
-    if not ignore_count and expected is not None and total_replacements != expected:
-        raise SystemExit(
-            f"Rule {rule['name']} replaced {total_replacements} occurrences, expected {expected}"
-        )
+    if not ignore_count and expected is not None:
+        if isinstance(expected, list):
+            if total_replacements not in expected:
+                raise SystemExit(
+                    f"Rule {rule['name']} replaced {total_replacements} occurrences, expected one of {expected}"
+                )
+        elif total_replacements != expected:
+            raise SystemExit(
+                f"Rule {rule['name']} replaced {total_replacements} occurrences, expected {expected}"
+            )
 
 
 def main() -> None:
