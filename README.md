@@ -146,7 +146,6 @@ In this workspace, the committed patch bundle under `patches/codex-desktop/` is 
 - bundled `Ubuntu` / `Ubuntu Mono` fonts
 - Linux project picker fixes
 - updater bypasses required for the Linux-patched prod build
-- a small set of desktop feature-default overrides
 - the recommended-skills clone workaround
 
 If OpenAI changes the bundle layout in a future release, adjust `patches/codex-desktop/manifest.json` and rerun your local helper.
