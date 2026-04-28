@@ -100,10 +100,10 @@
     {
       "name": "linux-window-hide-menu-bar",
       "glob": ".vite/build/main-*.js",
-      "find": "process.platform===`win32`&&D.removeMenu(),",
-      "replace": "process.platform===`linux`&&D.setMenuBarVisibility(!1),process.platform===`win32`&&D.removeMenu(),",
-      "count": 1,
-      "already_contains": "process.platform===`linux`&&D.setMenuBarVisibility(!1),"
+      "find_regex": "process\\.platform===`win32`&&(\\w+)\\.removeMenu\\(\\),",
+      "replace": "process.platform===`linux`&&\\1.setMenuBarVisibility(!1),process.platform===`win32`&&\\1.removeMenu(),",
+      "count": [1, 2],
+      "already_contains_regex": "process\\.platform===`linux`&&\\w+\\.setMenuBarVisibility\\(!1\\),process\\.platform===`win32`&&\\w+\\.removeMenu\\(\\),"
     },
     {
       "name": "linux-opaque-windows-default-code-theme",

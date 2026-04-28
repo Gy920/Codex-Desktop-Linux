@@ -268,6 +268,22 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
         )
         self.assertIn("process.platform===`linux`&&D.setMenuBarVisibility(!1),", patched)
 
+    def test_linux_window_hide_menu_rule_matches_latest_bundle_variable_names(self) -> None:
+        rule = self._load_patch_rule("linux-window-hide-menu-bar")
+        module = self._load_apply_patch_bundle_module()
+
+        original = "process.platform===`win32`&&k.removeMenu(),"
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn("process.platform===`linux`&&k.setMenuBarVisibility(!1),", patched)
+        self.assertIn("process.platform===`win32`&&k.removeMenu(),", patched)
+
     def test_linux_file_manager_file_open_uses_parent_directory_on_linux(self) -> None:
         rule = self._load_patch_rule("linux-file-manager-open-file-parent-directory")
         module = self._load_apply_patch_bundle_module()
