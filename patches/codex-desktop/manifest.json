@@ -51,9 +51,19 @@
       "name": "linux-picker-resolve-parent-directory",
       "glob": ".vite/build/main-*.js",
       "find_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{(?:const|let) (\\w+)=(\\w+)\\(e,this\\.host\\);return\\(await\\s*(?:\\(0,)?(\\w+)\\.stat\\)?\\(\\1\\)\\)\\.isDirectory\\(\\)\\?(?:\\(0,)?(\\w+)\\.resolve\\)?\\(\\1\\):null\\}catch\\((\\w+)\\)\\{return (\\w+)\\(\\)\\.warning\\([`\"]Failed to stat workspace root[`\"],\\{safe:\\{\\},sensitive:\\{error:\\5\\}\\}\\),null\\}\\}",
-      "replace": "async resolveWorkspaceRoot(e){try{let \\1=\\2(e,this.host),i=await(0,\\3.stat)(\\1);if(i.isDirectory())return(0,\\4.resolve)(\\1);if(i.isFile()){let n=(0,\\4.dirname)(\\1),o=await(0,\\3.stat)(n);if(o.isDirectory())return(0,\\4.resolve)(n)}return null}catch(\\5){return \\6().warning(`Failed to stat workspace root`,{safe:{},sensitive:{error:\\5}}),null}}",
+      "replace": "async resolveWorkspaceRoot(e){try{let \\1=\\2(e,this.host),__codexStat=await(0,\\3.stat)(\\1);if(__codexStat.isDirectory())return(0,\\4.resolve)(\\1);if(__codexStat.isFile()){let __codexParentDir=(0,\\4.dirname)(\\1),__codexParentDirStat=await(0,\\3.stat)(__codexParentDir);if(__codexParentDirStat.isDirectory())return(0,\\4.resolve)(__codexParentDir)}return null}catch(\\5){return \\6().warning(`Failed to stat workspace root`,{safe:{},sensitive:{error:\\5}}),null}}",
       "count": 1,
-      "already_contains": "if(i.isFile()){let n=(0,"
+      "already_contains": "__codexStat.isFile(){let __codexParentDir=",
+      "already_contains_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{let [A-Za-z_$][\\w$]*=[A-Za-z_$][\\w$]*\\(e,this\\.host\\),[A-Za-z_$][\\w$]*=await\\(0,[A-Za-z_$][\\w$]*\\.stat\\)\\([A-Za-z_$][\\w$]*\\);if\\([A-Za-z_$][\\w$]*\\.isDirectory\\(\\)\\)return\\(0,[A-Za-z_$][\\w$]*\\.resolve\\)\\([A-Za-z_$][\\w$]*\\);if\\([A-Za-z_$][\\w$]*\\.isFile\\(\\)\\)\\{"
+    },
+    {
+      "name": "linux-picker-resolve-parent-directory-self-heal",
+      "glob": ".vite/build/main-*.js",
+      "find_regex": "async resolveWorkspaceRoot\\(e\\)\\{try\\{let (\\w+)=(\\w+)\\(e,this\\.host\\),(\\w+)=await\\(0,(\\w+)\\.stat\\)\\(\\1\\);if\\(\\3\\.isDirectory\\(\\)\\)return\\(0,(\\w+)\\.resolve\\)\\(\\1\\);if\\(\\3\\.isFile\\(\\)\\)\\{let (\\w+)=\\(0,\\5\\.dirname\\)\\(\\1\\),(\\w+)=await\\(0,\\4\\.stat\\)\\(\\6\\);if\\(\\7\\.isDirectory\\(\\)\\)return\\(0,\\5\\.resolve\\)\\(\\6\\)\\}return null\\}catch\\((\\w+)\\)\\{return (\\w+)\\(\\)\\.warning\\(`Failed to stat workspace root`,\\{safe:\\{\\},sensitive:\\{error:\\8\\}\\}\\),null\\}\\}",
+      "replace": "async resolveWorkspaceRoot(e){try{let \\1=\\2(e,this.host),__codexStat=await(0,\\4.stat)(\\1);if(__codexStat.isDirectory())return(0,\\5.resolve)(\\1);if(__codexStat.isFile()){let __codexParentDir=(0,\\5.dirname)(\\1),__codexParentDirStat=await(0,\\4.stat)(__codexParentDir);if(__codexParentDirStat.isDirectory())return(0,\\5.resolve)(__codexParentDir)}return null}catch(\\8){return \\9().warning(`Failed to stat workspace root`,{safe:{},sensitive:{error:\\8}}),null}}",
+      "count": 1,
+      "already_contains": "__codexStat.isFile(){let __codexParentDir=",
+      "optional": true
     },
     {
       "name": "open-file-linux-fallback-file-manager",

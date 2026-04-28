@@ -457,6 +457,30 @@ install_app() {
     info "app.asar installed"
 }
 
+apply_committed_patch_bundle() {
+    local bundle_dir="$SCRIPT_DIR/patches/codex-desktop"
+
+    if [ ! -d "$bundle_dir" ]; then
+        return
+    fi
+
+    info "Applying committed Linux patch bundle..."
+    python3 "$SCRIPT_DIR/scripts/apply_patch_bundle.py" \
+        --bundle-dir "$SCRIPT_DIR/patches/codex-desktop" \
+        --asar "$INSTALL_DIR/resources/app.asar" \
+        --work-root "$WORK_DIR/patch-work/asar" \
+        --glob-prefix ".vite/build/" \
+        --skip-copy-tree
+
+    if [ -d "$INSTALL_DIR/content" ]; then
+        python3 "$SCRIPT_DIR/scripts/apply_patch_bundle.py" \
+            --bundle-dir "$SCRIPT_DIR/patches/codex-desktop" \
+            --target-dir "$INSTALL_DIR/content" \
+            --glob-prefix "webview/assets/" \
+            --ignore-count
+    fi
+}
+
 bundle_runtime_libs() {
     local compat_dir="$INSTALL_DIR/lib"
     local required_libs=(
@@ -499,6 +523,9 @@ create_start_script() {
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEBVIEW_DIR="$SCRIPT_DIR/content/webview"
 
+# Shell-level preload hooks have caused Electron renderer crashes on Linux.
+unset LD_PRELOAD
+
 pkill -f "http.server 5175" 2>/dev/null
 sleep 0.3
 
@@ -515,6 +542,9 @@ COMPAT_LIB_DIR="$SCRIPT_DIR/lib"
 if [ -d "$COMPAT_LIB_DIR" ]; then
     export LD_LIBRARY_PATH="$COMPAT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
+
+# Some terminal hosts export this and force Electron to behave like Node.js.
+unset ELECTRON_RUN_AS_NODE
 
 if [ -z "$CODEX_CLI_PATH" ]; then
     echo "Error: Codex CLI not found. Install with: npm i -g @openai/codex"
@@ -555,6 +585,7 @@ main() {
     download_electron
     extract_webview "$app_dir"
     install_app
+    apply_committed_patch_bundle
     bundle_runtime_libs
     create_start_script
 
