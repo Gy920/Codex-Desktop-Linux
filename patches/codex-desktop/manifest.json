@@ -74,6 +74,53 @@
       "already_contains": "process.platform===`linux`"
     },
     {
+      "name": "linux-file-manager-handler",
+      "glob": ".vite/build/main-*.js",
+      "find_regex": "var (\\w+)=\\$i\\(\\{id:`fileManager`,label:`Finder`,icon:`apps/finder\\.png`,kind:`fileManager`,darwin:\\{detect:\\(\\)=>`open`,args:(\\w+)=>Ti\\(\\2\\)\\},win32:\\{label:`File Explorer`,icon:`apps/file-explorer\\.png`,detect:(\\w+),args:\\2=>Ti\\(\\2\\),open:async\\(\\{path:\\2\\}\\)=>(\\w+)\\(\\2\\)\\}\\}\\);",
+      "replace": "var \\1=$i({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,darwin:{detect:()=>`open`,args:\\2=>Ti(\\2)},win32:{label:`File Explorer`,icon:`apps/file-explorer.png`,detect:\\3,args:\\2=>Ti(\\2),open:async({path:\\2})=>\\4(\\2)},linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`,args:\\2=>[\\2],open:async({path:\\2})=>\\4(\\2)}});",
+      "count": 1,
+      "already_contains": "linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`"
+    },
+    {
+      "name": "linux-file-manager-open-file-parent-directory",
+      "glob": ".vite/build/main-*.js",
+      "find": "async function ja(e){let n=Ma(e);if(n&&(0,a.statSync)(n).isFile()){t.shell.showItemInFolder(n);return}let r=n??e,i=await t.shell.openPath(r);if(i)throw Error(i)}",
+      "replace": "async function ja(e){let n=Ma(e);if(n&&(0,a.statSync)(n).isFile()){if(process.platform===`linux`){let e=(0,r.dirname)(n),i=await t.shell.openPath(e);if(i)throw Error(i);return}t.shell.showItemInFolder(n);return}let r=n??e,i=await t.shell.openPath(r);if(i)throw Error(i)}",
+      "count": 1,
+      "already_contains": "if(process.platform===`linux`){let e=(0,r.dirname)(n),i=await t.shell.openPath(e);if(i)throw Error(i);return}t.shell.showItemInFolder(n);return"
+    },
+    {
+      "name": "linux-window-auto-hide-menu",
+      "glob": ".vite/build/main-*.js",
+      "find": "...process.platform===`win32`?{autoHideMenuBar:!0}:{},",
+      "replace": "...process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{},",
+      "count": 1,
+      "already_contains": "process.platform===`win32`||process.platform===`linux`?{autoHideMenuBar:!0}:{}"
+    },
+    {
+      "name": "linux-window-hide-menu-bar",
+      "glob": ".vite/build/main-*.js",
+      "find": "process.platform===`win32`&&D.removeMenu(),",
+      "replace": "process.platform===`linux`&&D.setMenuBarVisibility(!1),process.platform===`win32`&&D.removeMenu(),",
+      "count": 1,
+      "already_contains": "process.platform===`linux`&&D.setMenuBarVisibility(!1),"
+    },
+    {
+      "name": "linux-opaque-windows-default-code-theme",
+      "glob": "webview/assets/code-theme-*.js",
+      "find": "opaqueWindows:e?.opaqueWindows??n.opaqueWindows,semanticColors:",
+      "replace": "opaqueWindows:e?.opaqueWindows??(typeof navigator<`u`&&((navigator.userAgentData?.platform??navigator.platform??navigator.userAgent).toLowerCase().includes(`linux`))?!0:n.opaqueWindows),semanticColors:",
+      "already_contains": "opaqueWindows:e?.opaqueWindows??(typeof navigator<`u`&&((navigator.userAgentData?.platform??navigator.platform??navigator.userAgent).toLowerCase().includes(`linux`))?!0:n.opaqueWindows),semanticColors:"
+    },
+    {
+      "name": "linux-opaque-windows-default-resolved-theme",
+      "glob": "webview/assets/use-resolved-theme-variant-*.js",
+      "find": "opaqueWindows:e?.opaqueWindows??n.opaqueWindows,semanticColors:",
+      "replace": "opaqueWindows:e?.opaqueWindows??(typeof navigator<`u`&&((navigator.userAgentData?.platform??navigator.platform??navigator.userAgent).toLowerCase().includes(`linux`))?!0:n.opaqueWindows),semanticColors:",
+      "already_contains": "opaqueWindows:e?.opaqueWindows??(typeof navigator<`u`&&((navigator.userAgentData?.platform??navigator.platform??navigator.userAgent).toLowerCase().includes(`linux`))?!0:n.opaqueWindows),semanticColors:",
+      "allow_missing_files": true
+    },
+    {
       "name": "skills-clone-without-sparse",
       "glob": ".vite/build/deeplinks-*.js",
       "find_regex": "\\[`clone`,`--depth`,`1`,`--filter=blob:none`,`--sparse`,(\\w+),(\\w+)\\]",

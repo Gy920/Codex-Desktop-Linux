@@ -16,6 +16,12 @@ What this bundle changes:
 - keeps the Linux "Select project" flow using directory selection first, then
   falls back to file selection only when the picker fails to return a folder
 - resolves a selected file back to its parent directory
+- adds a Linux-native `File Manager` open target and uses it as the open-file
+  fallback when the upstream target resolver returns nothing
+- defaults Linux windows to opaque chrome when the user has not explicitly set
+  an appearance override yet, which avoids translucent sidebar rendering issues
+- hides the native menu bar on Linux and keeps Electron window chrome behavior
+  closer to the upstream desktop app
 - disables the packaged Sparkle / install-update path inside the Electron main
   bundle so prod update prompts do not hard-block the patched Linux build
 - removes the `git clone --sparse` flag from recommended-skills bootstrap
@@ -24,7 +30,8 @@ Expected local workflow after updating Codex Desktop:
 
 1. Replace `codex-app/` with the new converted app.
 2. Run the local apply helper against `resources/app.asar`.
-3. Launch the app and verify the picker and skills bootstrap behavior.
+3. Launch the app and verify the picker, Linux window chrome, and skills
+   bootstrap behavior.
 
 Notes:
 

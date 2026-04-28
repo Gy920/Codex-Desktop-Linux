@@ -520,24 +520,21 @@ bundle_runtime_libs() {
 create_start_script() {
     cat > "$INSTALL_DIR/start.sh" << 'SCRIPT'
 #!/bin/bash
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEBVIEW_DIR="$SCRIPT_DIR/content/webview"
+LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/codex-desktop"
+LOG_FILE="$LOG_DIR/launcher.log"
+COMPAT_LIB_DIR="$SCRIPT_DIR/lib"
 
 # Shell-level preload hooks have caused Electron renderer crashes on Linux.
 unset LD_PRELOAD
 
-pkill -f "http.server 5175" 2>/dev/null
-sleep 0.3
+mkdir -p "$LOG_DIR"
+exec >>"$LOG_FILE" 2>&1
 
-if [ -d "$WEBVIEW_DIR" ] && [ "$(ls -A "$WEBVIEW_DIR" 2>/dev/null)" ]; then
-    cd "$WEBVIEW_DIR"
-    python3 -m http.server 5175 &> /dev/null &
-    HTTP_PID=$!
-    trap "kill $HTTP_PID 2>/dev/null" EXIT
-fi
-
-export CODEX_CLI_PATH="${CODEX_CLI_PATH:-$(which codex 2>/dev/null)}"
-COMPAT_LIB_DIR="$SCRIPT_DIR/lib"
+echo "[$(date -Is)] Starting Codex Desktop launcher"
 
 if [ -d "$COMPAT_LIB_DIR" ]; then
     export LD_LIBRARY_PATH="$COMPAT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -546,13 +543,116 @@ fi
 # Some terminal hosts export this and force Electron to behave like Node.js.
 unset ELECTRON_RUN_AS_NODE
 
+find_codex_cli() {
+    if command -v codex >/dev/null 2>&1; then
+        command -v codex
+        return 0
+    fi
+
+    if [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+        export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+        # shellcheck disable=SC1090
+        . "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
+        if command -v codex >/dev/null 2>&1; then
+            command -v codex
+            return 0
+        fi
+    fi
+
+    local candidate
+    for candidate in \
+        "$HOME/.nvm/versions/node/current/bin/codex" \
+        "$HOME/.nvm/versions/node"/*/bin/codex \
+        "$HOME/.local/share/pnpm/codex" \
+        "$HOME/.local/bin/codex" \
+        "/usr/local/bin/codex" \
+        "/usr/bin/codex"
+    do
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+wait_for_webview_server() {
+    local attempt
+
+    for attempt in $(seq 1 50); do
+        if python3 -c "import socket; s=socket.socket(); s.settimeout(0.5); s.connect(('127.0.0.1', 5175)); s.close()" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.1
+    done
+
+    return 1
+}
+
+verify_webview_origin() {
+    local url="$1"
+    local expected_file="$2"
+
+    python3 - "$url" "$expected_file" <<'PY'
+import pathlib
+import sys
+import urllib.request
+
+url = sys.argv[1]
+expected_file = pathlib.Path(sys.argv[2])
+
+expected = expected_file.read_bytes()
+with urllib.request.urlopen(url, timeout=2) as response:
+    body = response.read()
+
+if body != expected:
+    raise SystemExit(
+        f"Webview origin validation failed for {url}; served index.html did not match {expected_file}"
+    )
+PY
+}
+
+pkill -f "http.server 5175" 2>/dev/null || true
+sleep 0.3
+
+if [ -d "$WEBVIEW_DIR" ] && [ "$(ls -A "$WEBVIEW_DIR" 2>/dev/null)" ]; then
+    cd "$WEBVIEW_DIR"
+    nohup python3 -m http.server 5175 >/dev/null 2>&1 &
+    HTTP_PID=$!
+    trap "kill $HTTP_PID 2>/dev/null || true" EXIT
+
+    if ! wait_for_webview_server; then
+        echo "Error: Codex Desktop webview server did not become ready on port 5175"
+        exit 1
+    fi
+
+    if ! kill -0 "$HTTP_PID" 2>/dev/null; then
+        echo "Error: Codex Desktop webview server exited before Electron launch"
+        exit 1
+    fi
+
+    if ! verify_webview_origin "http://127.0.0.1:5175/index.html" "$WEBVIEW_DIR/index.html"; then
+        echo "Error: Codex Desktop webview origin validation failed"
+        exit 1
+    fi
+fi
+
+export CODEX_CLI_PATH="${CODEX_CLI_PATH:-$(find_codex_cli || true)}"
+
 if [ -z "$CODEX_CLI_PATH" ]; then
     echo "Error: Codex CLI not found. Install with: npm i -g @openai/codex"
     exit 1
 fi
 
 cd "$SCRIPT_DIR"
-exec "$SCRIPT_DIR/electron" --no-sandbox "$@"
+exec "$SCRIPT_DIR/electron" \
+    --no-sandbox \
+    --class=codex-desktop \
+    --app-id=codex-desktop \
+    --ozone-platform-hint=auto \
+    --disable-gpu-sandbox \
+    "$@"
 SCRIPT
 
     chmod +x "$INSTALL_DIR/start.sh"
