@@ -110,7 +110,8 @@
       "glob": "webview/assets/code-theme-*.js",
       "find": "opaqueWindows:e?.opaqueWindows??n.opaqueWindows,semanticColors:",
       "replace": "opaqueWindows:e?.opaqueWindows??(typeof navigator<`u`&&((navigator.userAgentData?.platform??navigator.platform??navigator.userAgent).toLowerCase().includes(`linux`))?!0:n.opaqueWindows),semanticColors:",
-      "already_contains": "opaqueWindows:e?.opaqueWindows??(typeof navigator<`u`&&((navigator.userAgentData?.platform??navigator.platform??navigator.userAgent).toLowerCase().includes(`linux`))?!0:n.opaqueWindows),semanticColors:"
+      "already_contains": "opaqueWindows:e?.opaqueWindows??(typeof navigator<`u`&&((navigator.userAgentData?.platform??navigator.platform??navigator.userAgent).toLowerCase().includes(`linux`))?!0:n.opaqueWindows),semanticColors:",
+      "allow_missing_files": true
     },
     {
       "name": "linux-opaque-windows-default-resolved-theme",
