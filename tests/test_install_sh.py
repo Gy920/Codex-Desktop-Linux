@@ -221,6 +221,29 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
         self.assertIn("linux:{label:`File Manager`", patched)
         self.assertIn("open:async({path:e})=>la(e)", patched)
 
+    def test_linux_file_manager_patch_matches_latest_bundle_constructor_helper(self) -> None:
+        rule = self._load_patch_rule("linux-file-manager-handler")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "var lu=jl({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,"
+            "darwin:{detect:()=>`open`,args:e=>il(e)},win32:{label:`File Explorer`,"
+            "icon:`apps/file-explorer.png`,detect:uu,args:e=>il(e),open:async({path:e})=>du(e)}});"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn("var lu=jl(", patched)
+        self.assertIn("darwin:{detect:()=>`open`,args:e=>il(e)}", patched)
+        self.assertIn("win32:{label:`File Explorer`,icon:`apps/file-explorer.png`,detect:uu,args:e=>il(e)", patched)
+        self.assertIn("linux:{label:`File Manager`", patched)
+        self.assertIn("open:async({path:e})=>du(e)", patched)
+
     def test_linux_window_menu_rules_apply(self) -> None:
         auto_hide_rule = self._load_patch_rule("linux-window-auto-hide-menu")
         hide_menu_rule = self._load_patch_rule("linux-window-hide-menu-bar")
@@ -262,9 +285,30 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
             patched = file_path.read_text(encoding="utf-8")
 
         self.assertIn("if(process.platform===`linux`)", patched)
-        self.assertIn("(0,r.dirname)(n)", patched)
-        self.assertIn("await t.shell.openPath(e)", patched)
+        self.assertIn("lastIndexOf(`/`)", patched)
+        self.assertIn("await t.shell.openPath(__codexParentDir)", patched)
         self.assertIn("t.shell.showItemInFolder(n);return", patched)
+
+    def test_linux_file_manager_file_open_matches_latest_bundle_names(self) -> None:
+        rule = self._load_patch_rule("linux-file-manager-open-file-parent-directory")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "async function du(e){let t=fu(e);if(t&&(0,o.statSync)(t).isFile()){"
+            "n.shell.showItemInFolder(t);return}let r=t??e,i=await n.shell.openPath(r);if(i)throw Error(i)}"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn("if(process.platform===`linux`)", patched)
+        self.assertIn("__codexParentDirIndex", patched)
+        self.assertIn("await n.shell.openPath(__codexParentDir)", patched)
+        self.assertIn("n.shell.showItemInFolder(t);return", patched)
 
     def test_linux_opaque_windows_default_patch_applies_to_code_theme_bundle(self) -> None:
         rule = self._load_patch_rule("linux-opaque-windows-default-code-theme")
