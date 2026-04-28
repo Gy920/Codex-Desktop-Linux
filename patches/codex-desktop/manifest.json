@@ -76,8 +76,8 @@
     {
       "name": "linux-file-manager-handler",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "var (\\w+)=\\$i\\(\\{id:`fileManager`,label:`Finder`,icon:`apps/finder\\.png`,kind:`fileManager`,darwin:\\{detect:\\(\\)=>`open`,args:(\\w+)=>Ti\\(\\2\\)\\},win32:\\{label:`File Explorer`,icon:`apps/file-explorer\\.png`,detect:(\\w+),args:\\2=>Ti\\(\\2\\),open:async\\(\\{path:\\2\\}\\)=>(\\w+)\\(\\2\\)\\}\\}\\);",
-      "replace": "var \\1=$i({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,darwin:{detect:()=>`open`,args:\\2=>Ti(\\2)},win32:{label:`File Explorer`,icon:`apps/file-explorer.png`,detect:\\3,args:\\2=>Ti(\\2),open:async({path:\\2})=>\\4(\\2)},linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`,args:\\2=>[\\2],open:async({path:\\2})=>\\4(\\2)}});",
+      "find_regex": "var (\\w+)=\\$i\\(\\{id:`fileManager`,label:`Finder`,icon:`apps/finder\\.png`,kind:`fileManager`,darwin:\\{detect:\\(\\)=>`open`,args:(\\w+)=>(\\w+)\\(\\2\\)\\},win32:\\{label:`File Explorer`,icon:`apps/file-explorer\\.png`,detect:(\\w+),args:\\2=>\\3\\(\\2\\),open:async\\(\\{path:\\2\\}\\)=>(\\w+)\\(\\2\\)\\}\\}\\);",
+      "replace": "var \\1=$i({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,darwin:{detect:()=>`open`,args:\\2=>\\3(\\2)},win32:{label:`File Explorer`,icon:`apps/file-explorer.png`,detect:\\4,args:\\2=>\\3(\\2),open:async({path:\\2})=>\\5(\\2)},linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`,args:\\2=>[\\2],open:async({path:\\2})=>\\5(\\2)}});",
       "count": 1,
       "already_contains": "linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`"
     },
