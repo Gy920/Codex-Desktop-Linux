@@ -420,17 +420,31 @@ download_electron() {
 
     local url="https://github.com/electron/electron/releases/download/v${ELECTRON_VERSION}/electron-v${ELECTRON_VERSION}-linux-${electron_arch}.zip"
 
-    if ! curl -L --progress-bar --fail \
-            --retry 5 --retry-delay 2 \
+    if curl -L --progress-bar --fail \
+            --retry 10 --retry-delay 5 \
             --max-time 600 --connect-timeout 30 \
-            -o "$WORK_DIR/electron.zip" "$url"; then
-        error "Failed to download Electron from $url"
+            -o "$WORK_DIR/electron.zip" "$url" 2>/dev/null; then
+        mkdir -p "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
+        unzip -qo "$WORK_DIR/electron.zip"
+        info "Electron ready"
+        return
     fi
-    mkdir -p "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
-    unzip -qo "$WORK_DIR/electron.zip"
 
-    info "Electron ready"
+    warn "GitHub releases returned 502, trying npm fallback..."
+    local npm_dir="$WORK_DIR/electron-npm"
+    mkdir -p "$npm_dir"
+    if npm install "electron@${ELECTRON_VERSION}" --prefix "$npm_dir" 2>&1 >&2; then
+        local electron_dist="$npm_dir/node_modules/electron/dist"
+        if [ -f "$electron_dist/electron" ]; then
+            mkdir -p "$INSTALL_DIR"
+            cp -r "$electron_dist"/* "$INSTALL_DIR/"
+            info "Electron ready (from npm)"
+            return
+        fi
+    fi
+
+    error "Failed to download Electron from all sources"
 }
 
 # ---- Extract webview files ----
