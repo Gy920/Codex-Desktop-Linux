@@ -227,11 +227,8 @@ jobs:
           apt-get install -y \
             build-essential \
             ca-certificates \
-            clang-12 \
             curl \
             git \
-            libc++-12-dev \
-            libc++abi-12-dev \
             python3 \
             tar \
             unzip \
@@ -240,6 +237,7 @@ jobs:
           # Ubuntu 20.04 cannot reliably reach Launchpad from hosted CI.
           # Use the base-repo Clang/libc++ toolchain and let install.sh select it.
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
+            apt-get install -y clang-12 libc++-12-dev libc++abi-12-dev
             printf '%s\n' '#include <compare>' 'int main(){auto order=(1 <=> 2);return order < 0 ? 0 : 1;}' \
               | clang++-12 -std=c++20 -stdlib=libc++ -x c++ - -o /tmp/codex-ci-toolchain-check
           fi
