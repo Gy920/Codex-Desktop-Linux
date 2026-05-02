@@ -227,31 +227,26 @@ jobs:
           apt-get install -y \
             build-essential \
             ca-certificates \
+            clang-12 \
             curl \
             git \
+            libc++-12-dev \
+            libc++abi-12-dev \
             python3 \
             tar \
             unzip \
             xz-utils
 
-          # Ubuntu 22.04/24.04 already ship a suitable GCC in the base repos.
+          # Ubuntu 20.04 cannot reliably reach Launchpad from hosted CI.
+          # Use the base-repo Clang/libc++ toolchain and let install.sh select it.
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
-            apt-get install -y software-properties-common
-
-            for attempt in 1 2 3; do
-              if timeout 120s add-apt-repository -y ppa:ubuntu-toolchain-r/test; then
-                break
-              fi
-              if [ "$attempt" -eq 3 ]; then
-                echo "Failed to add ubuntu-toolchain-r/test PPA after ${attempt} attempts" >&2
-                exit 1
-              fi
-              echo "Retrying ubuntu-toolchain-r/test PPA after attempt ${attempt}" >&2
-              sleep $((attempt * 5))
-            done
-
-            apt-get update
-            apt-get install -y gcc-11 g++-11
+            clang++-12 -std=c++20 -stdlib=libc++ -x c++ - <<'EOF' >/dev/null
+#include <compare>
+int main() {
+  auto order = (1 <=> 2);
+  return order < 0 ? 0 : 1;
+}
+EOF
           fi
 
       - name: Download latest DMG artifact

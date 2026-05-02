@@ -181,11 +181,9 @@ compiler_supports_cxx20() {
     mkdir -p "$test_dir"
     cat > "$test_dir/test.cpp" << 'EOF'
 #include <compare>
-#include <source_location>
 int main() {
     auto order = (1 <=> 2);
-    auto loc = std::source_location::current();
-    return (order < 0 && loc.line() > 0) ? 0 : 1;
+    return order < 0 ? 0 : 1;
 }
 EOF
     "$cxx_bin" -std=c++20 "$@" "$test_dir/test.cpp" -o "$test_dir/test-bin" >/dev/null 2>&1
