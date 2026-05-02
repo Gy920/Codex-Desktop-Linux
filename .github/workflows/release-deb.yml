@@ -240,13 +240,8 @@ jobs:
           # Ubuntu 20.04 cannot reliably reach Launchpad from hosted CI.
           # Use the base-repo Clang/libc++ toolchain and let install.sh select it.
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
-            clang++-12 -std=c++20 -stdlib=libc++ -x c++ - <<'EOF' >/dev/null
-#include <compare>
-int main() {
-  auto order = (1 <=> 2);
-  return order < 0 ? 0 : 1;
-}
-EOF
+            printf '%s\n' '#include <compare>' 'int main(){auto order=(1 <=> 2);return order < 0 ? 0 : 1;}' \
+              | clang++-12 -std=c++20 -stdlib=libc++ -x c++ - -o /tmp/codex-ci-toolchain-check
           fi
 
       - name: Download latest DMG artifact
