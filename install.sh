@@ -181,9 +181,15 @@ compiler_supports_cxx20() {
     mkdir -p "$test_dir"
     cat > "$test_dir/test.cpp" << 'EOF'
 #include <compare>
+#include <concepts>
+#include <ranges>
+#include <source_location>
 int main() {
+    static_assert(std::three_way_comparable_with<int, int>);
     auto order = (1 <=> 2);
-    return order < 0 ? 0 : 1;
+    auto view = std::views::iota(0, 3);
+    auto loc = std::source_location::current();
+    return (order < 0 && *view.begin() == 0 && loc.line() > 0) ? 0 : 1;
 }
 EOF
     "$cxx_bin" -std=c++20 "$@" "$test_dir/test.cpp" -o "$test_dir/test-bin" >/dev/null 2>&1
@@ -242,7 +248,7 @@ select_toolchain() {
         fi
     done
 
-    error "A compiler with working C++20 standard library support is required. Install GCC 10+ (recommended) or Clang with libc++/libstdc++ that provides <compare>."
+    error "A compiler with working C++20 standard library support is required. Install GCC 11+ or Clang with libc++ that provides <compare>, <concepts>, <ranges>, and <source_location>."
 }
 
 resolve_runtime_lib() {
@@ -359,10 +365,19 @@ build_native_modules() {
         "$build_dir/node_modules/better-sqlite3/build" \
         "$build_dir/node_modules/node-pty/build"
 
-    info "Compiling native modules from source for Electron v$ELECTRON_VERSION (this takes ~1 min)..."
-    npm_config_build_from_source=true \
-    CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" \
-        npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force --build-from-source --disable-pre-gyp-copy 2>&1 >&2
+    info "Rebuilding native modules for Electron v$ELECTRON_VERSION..."
+    if [ "${CODEX_FORCE_SOURCE_NATIVE_MODULES:-}" = "1" ]; then
+        info "Forcing native module rebuild from source"
+        npm_config_build_from_source=true \
+        CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" \
+            npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force --build-from-source --disable-pre-gyp-copy 2>&1 >&2
+    elif ! CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" \
+        npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force 2>&1 >&2; then
+        warn "Prebuilt native modules unavailable; retrying Electron rebuild from source"
+        npm_config_build_from_source=true \
+        CC="$CC_BIN" CXX="$CXX_BIN" CXXFLAGS="${CXXFLAGS_EXTRA[*]:-}" LDFLAGS="${LDFLAGS_EXTRA[*]:-}" \
+            npx --yes @electron/rebuild -v "$ELECTRON_VERSION" --force --build-from-source --disable-pre-gyp-copy 2>&1 >&2
+    fi
 
     info "Native modules built successfully"
 
