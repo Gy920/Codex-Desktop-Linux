@@ -267,6 +267,29 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
         self.assertIn("linux:{label:`File Manager`", patched)
         self.assertIn("open:async({path:$e})=>$o($e)", patched)
 
+    def test_linux_file_manager_patch_matches_assignment_without_var(self) -> None:
+        rule = self._load_patch_rule("linux-file-manager-handler")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "Ih=rh({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,"
+            "darwin:{detect:()=>`open`,args:e=>km(e)},win32:{label:`File Explorer`,"
+            "icon:`apps/file-explorer.png`,detect:Lh,args:e=>km(e),open:async({path:e})=>Rh(e)}});"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn("Ih=rh(", patched)
+        self.assertIn("darwin:{detect:()=>`open`,args:e=>km(e)}", patched)
+        self.assertIn("detect:Lh,args:e=>km(e)", patched)
+        self.assertIn("linux:{label:`File Manager`", patched)
+        self.assertIn("open:async({path:e})=>Rh(e)", patched)
+
     def test_linux_window_menu_rules_apply(self) -> None:
         auto_hide_rule = self._load_patch_rule("linux-window-auto-hide-menu")
         hide_menu_rule = self._load_patch_rule("linux-window-hide-menu-bar")
