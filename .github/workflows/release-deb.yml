@@ -239,13 +239,14 @@ jobs:
             apt-get install -y software-properties-common
 
             for attempt in 1 2 3; do
-              if add-apt-repository -y ppa:ubuntu-toolchain-r/test; then
+              if timeout 120s add-apt-repository -y ppa:ubuntu-toolchain-r/test; then
                 break
               fi
               if [ "$attempt" -eq 3 ]; then
                 echo "Failed to add ubuntu-toolchain-r/test PPA after ${attempt} attempts" >&2
                 exit 1
               fi
+              echo "Retrying ubuntu-toolchain-r/test PPA after attempt ${attempt}" >&2
               sleep $((attempt * 5))
             done
 
