@@ -334,25 +334,37 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
         rule = self._load_patch_rule("linux-avatar-overlay-default-pointer-interactive")
         module = self._load_apply_patch_bundle_module()
 
-        original = (
-            "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),"
-            "this.pointerInteractive=!1,this.mousePassthroughEnabled=!1,"
-            "process.platform===`darwin`?n.setVisibleOnAllWorkspaces(!0,{visibleOnFullScreen:!0,"
-            "skipTransformProcessType:!0}):n.setVisibleOnAllWorkspaces(!0),"
+        cases = (
+            (
+                "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),"
+                "this.pointerInteractive=!1,this.mousePassthroughEnabled=!1,"
+                "process.platform===`darwin`?n.setVisibleOnAllWorkspaces(!0,{visibleOnFullScreen:!0,"
+                "skipTransformProcessType:!0}):n.setVisibleOnAllWorkspaces(!0),"
+            ),
+            (
+                "this.rendererReady=this.windowManager.isWebContentsReady(t.webContents.id),"
+                "this.dragState=null,this.layout=null,this.mascotSize=gO,"
+                "this.mousePassthroughEnabled=!1,this.placement=`top-end`,"
+                "this.pointerInteractive=!1,this.traySize=null,"
+                "process.platform===`darwin`?t.setVisibleOnAllWorkspaces(!0,{visibleOnFullScreen:!0,"
+                "skipTransformProcessType:!0}):t.setVisibleOnAllWorkspaces(!0),"
+            ),
         )
 
-        with TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(original, encoding="utf-8")
-            module.apply_rule(rule, Path(temp_dir))
-            patched = file_path.read_text(encoding="utf-8")
+        for original in cases:
+            with self.subTest(original=original):
+                with TemporaryDirectory() as temp_dir:
+                    file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_text(original, encoding="utf-8")
+                    module.apply_rule(rule, Path(temp_dir))
+                    patched = file_path.read_text(encoding="utf-8")
 
-        self.assertIn(
-            "this.pointerInteractive=process.platform===`linux`",
-            patched,
-        )
-        self.assertIn("this.mousePassthroughEnabled=!1", patched)
+                self.assertIn(
+                    "this.pointerInteractive=process.platform===`linux`",
+                    patched,
+                )
+                self.assertIn("this.mousePassthroughEnabled=!1", patched)
 
     def test_linux_file_manager_file_open_uses_parent_directory_on_linux(self) -> None:
         rule = self._load_patch_rule("linux-file-manager-open-file-parent-directory")

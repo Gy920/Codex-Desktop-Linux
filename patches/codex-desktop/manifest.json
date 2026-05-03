@@ -108,10 +108,10 @@
     {
       "name": "linux-avatar-overlay-default-pointer-interactive",
       "glob": ".vite/build/main-*.js",
-      "find": "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),this.pointerInteractive=!1,this.mousePassthroughEnabled=!1,",
-      "replace": "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),this.pointerInteractive=process.platform===`linux`,this.mousePassthroughEnabled=!1,",
+      "find_regex": "this\\.rendererReady=this\\.windowManager\\.isWebContentsReady\\(([A-Za-z_$][\\w$]*)\\.webContents\\.id\\),(?:(this\\.dragState=null,this\\.layout=null,this\\.mascotSize=[A-Za-z_$][\\w$]*,)?this\\.mousePassthroughEnabled=!1,(this\\.placement=`top-end`,)?this\\.pointerInteractive=!1,|this\\.pointerInteractive=!1,this\\.mousePassthroughEnabled=!1,)",
+      "replace": "this.rendererReady=this.windowManager.isWebContentsReady(\\1.webContents.id),\\2this.mousePassthroughEnabled=!1,\\3this.pointerInteractive=process.platform===`linux`,",
       "count": 1,
-      "already_contains": "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),this.pointerInteractive=process.platform===`linux`,this.mousePassthroughEnabled=!1,"
+      "already_contains_regex": "this\\.pointerInteractive=process\\.platform===`linux`"
     },
     {
       "name": "linux-opaque-windows-default-code-theme",
