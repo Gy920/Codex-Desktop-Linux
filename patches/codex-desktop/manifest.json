@@ -106,6 +106,14 @@
       "already_contains_regex": "process\\.platform===`linux`&&\\w+\\.setMenuBarVisibility\\(!1\\),process\\.platform===`win32`&&\\w+\\.removeMenu\\(\\),"
     },
     {
+      "name": "linux-avatar-overlay-default-pointer-interactive",
+      "glob": ".vite/build/main-*.js",
+      "find": "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),this.pointerInteractive=!1,this.mousePassthroughEnabled=!1,",
+      "replace": "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),this.pointerInteractive=process.platform===`linux`,this.mousePassthroughEnabled=!1,",
+      "count": 1,
+      "already_contains": "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),this.pointerInteractive=process.platform===`linux`,this.mousePassthroughEnabled=!1,"
+    },
+    {
       "name": "linux-opaque-windows-default-code-theme",
       "glob": "webview/assets/code-theme-*.js",
       "find": "opaqueWindows:e?.opaqueWindows??n.opaqueWindows,semanticColors:",
