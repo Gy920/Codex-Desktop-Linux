@@ -223,8 +223,23 @@ jobs:
       - name: Install build dependencies
         run: |
           export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y \
+          apt_retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              if [ "$attempt" = "3" ]; then
+                return 1
+              fi
+              sleep $((attempt * 10))
+            done
+          }
+
+          if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
+            sed -i 's|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
+          fi
+
+          apt_retry apt-get update
+          apt_retry apt-get install -y \
             build-essential \
             ca-certificates \
             curl \
@@ -237,13 +252,13 @@ jobs:
           # Ubuntu 20.04 cannot reliably reach Launchpad from hosted CI.
           # Install a modern Clang/libc++ toolchain from apt.llvm.org instead.
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
-            apt-get install -y gnupg lsb-release
+            apt_retry apt-get install -y gnupg lsb-release
             curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
               | gpg --dearmor > /usr/share/keyrings/llvm.gpg
             echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/focal/ llvm-toolchain-focal-18 main" \
               > /etc/apt/sources.list.d/llvm.list
-            apt-get update
-            apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev
+            apt_retry apt-get update
+            apt_retry apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev
             printf '%s\n' \
               '#include <compare>' \
               '#include <concepts>' \
