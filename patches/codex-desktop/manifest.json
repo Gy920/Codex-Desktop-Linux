@@ -106,6 +106,14 @@
       "already_contains_regex": "process\\.platform===`linux`&&\\w+\\.setMenuBarVisibility\\(!1\\),process\\.platform===`win32`&&\\w+\\.removeMenu\\(\\),"
     },
     {
+      "name": "linux-close-window-routes-through-quit-confirmation",
+      "glob": ".vite/build/main-*.js",
+      "find_regex": "([A-Za-z_$][\\w$]*)&&([A-Za-z_$][\\w$]*)\\.on\\(`close`,([A-Za-z_$][\\w$]*)=>\\{this\\.persistPrimaryWindowBounds\\(\\2,([A-Za-z_$][\\w$]*)\\);let ([A-Za-z_$][\\w$]*)=this\\.getPrimaryWindows\\(\\4\\)\\.some\\([A-Za-z_$][\\w$]*=>[A-Za-z_$][\\w$]*!==\\2\\);if\\(process\\.platform===`win32`&&\\4===`local`&&!this\\.isAppQuitting&&this\\.options\\.canHideLastLocalWindowToTray\\?\\.\\(\\)===!0&&!\\5\\)\\{\\3\\.preventDefault\\(\\),\\2\\.hide\\(\\);return\\}if\\(process\\.platform===`darwin`&&!this\\.isAppQuitting&&!\\5\\)\\{if\\(\\2\\.isFullScreen\\(\\)\\)\\{\\3\\.preventDefault\\(\\),\\2\\.once\\(`leave-full-screen`,\\(\\)=>\\{\\2\\.isDestroyed\\(\\)\\|\\|\\2\\.hide\\(\\)\\}\\),\\2\\.setFullScreen\\(!1\\);return\\}\\3\\.preventDefault\\(\\),\\2\\.hide\\(\\)\\}\\}\\);",
+      "replace": "\\1&&\\2.on(`close`,\\3=>{this.persistPrimaryWindowBounds(\\2,\\4);let __codexHasOtherPrimaryWindow=this.getPrimaryWindows(\\4).some(e=>e!==\\2);if(process.platform===`linux`&&\\4===`local`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow){\\3.preventDefault(),t.app.quit();return}if(process.platform===`win32`&&\\4===`local`&&!this.isAppQuitting&&this.options.canHideLastLocalWindowToTray?.()===!0&&!__codexHasOtherPrimaryWindow){\\3.preventDefault(),\\2.hide();return}if(process.platform===`darwin`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow){if(\\2.isFullScreen()){\\3.preventDefault(),\\2.once(`leave-full-screen`,()=>{\\2.isDestroyed()||\\2.hide()}),\\2.setFullScreen(!1);return}\\3.preventDefault(),\\2.hide()}});",
+      "count": 1,
+      "already_contains_regex": "let __codexHasOtherPrimaryWindow=this\\.getPrimaryWindows\\([A-Za-z_$][\\w$]*\\)\\.some\\([A-Za-z_$][\\w$]*=>[A-Za-z_$][\\w$]*!==[A-Za-z_$][\\w$]*\\);if\\(process\\.platform===`linux`&&[A-Za-z_$][\\w$]*===`local`&&!this\\.isAppQuitting&&!__codexHasOtherPrimaryWindow\\)\\{[A-Za-z_$][\\w$]*\\.preventDefault\\(\\),t\\.app\\.quit\\(\\);return\\}"
+    },
+    {
       "name": "linux-avatar-overlay-default-pointer-interactive",
       "glob": ".vite/build/main-*.js",
       "find_regex": "this\\.rendererReady=this\\.windowManager\\.isWebContentsReady\\(([A-Za-z_$][\\w$]*)\\.webContents\\.id\\),(?:(this\\.dragState=null,this\\.layout=null,this\\.mascotSize=[A-Za-z_$][\\w$]*,)?this\\.mousePassthroughEnabled=!1,(this\\.placement=`top-end`,)?this\\.pointerInteractive=!1,|this\\.pointerInteractive=!1,this\\.mousePassthroughEnabled=!1,)",

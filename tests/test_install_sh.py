@@ -330,6 +330,42 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
         self.assertIn("process.platform===`linux`&&k.setMenuBarVisibility(!1),", patched)
         self.assertIn("process.platform===`win32`&&k.removeMenu(),", patched)
 
+    def test_linux_close_routes_through_quit_confirmation_before_window_closes(self) -> None:
+        rule = self._load_patch_rule("linux-close-window-routes-through-quit-confirmation")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "_&&D.on(`close`,e=>{this.persistPrimaryWindowBounds(D,d);"
+            "let t=this.getPrimaryWindows(d).some(e=>e!==D);"
+            "if(process.platform===`win32`&&d===`local`&&!this.isAppQuitting&&"
+            "this.options.canHideLastLocalWindowToTray?.()===!0&&!t){"
+            "e.preventDefault(),D.hide();return}"
+            "if(process.platform===`darwin`&&!this.isAppQuitting&&!t){"
+            "if(D.isFullScreen()){e.preventDefault(),D.once(`leave-full-screen`,()=>{"
+            "D.isDestroyed()||D.hide()}),D.setFullScreen(!1);return}"
+            "e.preventDefault(),D.hide()}});"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "let __codexHasOtherPrimaryWindow=this.getPrimaryWindows(d).some(e=>e!==D);",
+            patched,
+        )
+        self.assertIn(
+            "if(process.platform===`linux`&&d===`local`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow)",
+            patched,
+        )
+        self.assertIn("e.preventDefault(),t.app.quit();return", patched)
+        self.assertIn("process.platform===`win32`&&d===`local`", patched)
+        self.assertIn("process.platform===`darwin`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow", patched)
+        self.assertNotIn("let t=this.getPrimaryWindows(d).some", patched)
+
     def test_linux_avatar_overlay_defaults_to_pointer_interactive(self) -> None:
         rule = self._load_patch_rule("linux-avatar-overlay-default-pointer-interactive")
         module = self._load_apply_patch_bundle_module()
