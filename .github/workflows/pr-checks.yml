@@ -1,0 +1,27 @@
+name: PR Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "codex/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run installer and patch tests
+        run: python3 -m unittest -v tests/test_install_sh.py
