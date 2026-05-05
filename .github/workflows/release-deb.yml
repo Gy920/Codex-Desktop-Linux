@@ -45,20 +45,23 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          sudo apt-get update
           sudo apt-get install -y \
             build-essential \
             ca-certificates \
             curl \
-            g++-11 \
-            gcc-11 \
             git \
             python3 \
             tar \
             unzip \
             xz-utils
+
+          # The hosted ubuntu-24.04 runner already provides a modern enough GCC
+          # for install.sh to select a working C++20 toolchain. Avoid relying on
+          # Launchpad PPA availability in prepare-release.
+          if ! command -v gcc >/dev/null 2>&1 || ! command -v g++ >/dev/null 2>&1; then
+            echo "System GCC/G++ missing on ubuntu-24.04 runner" >&2
+            exit 1
+          fi
 
       - name: Build Linux app from latest DMG
         env:
@@ -221,20 +224,34 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y software-properties-common
-          add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          apt-get update
           apt-get install -y \
             build-essential \
             ca-certificates \
             curl \
-            g++-11 \
-            gcc-11 \
             git \
             python3 \
             tar \
             unzip \
             xz-utils
+
+          # Ubuntu 20.04 cannot reliably reach Launchpad from hosted CI.
+          # Install a modern Clang/libc++ toolchain from apt.llvm.org instead.
+          if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
+            apt-get install -y gnupg lsb-release
+            curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+              | gpg --dearmor > /usr/share/keyrings/llvm.gpg
+            echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/focal/ llvm-toolchain-focal-18 main" \
+              > /etc/apt/sources.list.d/llvm.list
+            apt-get update
+            apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev
+            printf '%s\n' \
+              '#include <compare>' \
+              '#include <concepts>' \
+              '#include <ranges>' \
+              '#include <source_location>' \
+              'int main(){static_assert(std::three_way_comparable_with<int,int>);auto order=(1 <=> 2);auto v=std::views::iota(0,3);auto loc=std::source_location::current();return (order < 0 && *v.begin()==0 && loc.line()>0) ? 0 : 1;}' \
+              | clang++-18 -std=c++20 -stdlib=libc++ -x c++ - -o /tmp/codex-ci-toolchain-check
+          fi
 
       - name: Download latest DMG artifact
         uses: actions/download-artifact@v4
@@ -245,6 +262,7 @@ jobs:
       - name: Build Linux app from downloaded DMG
         env:
           npm_config_python: /usr/bin/python3
+          CODEX_FORCE_SOURCE_NATIVE_MODULES: ${{ matrix.ubuntu_version == '20.04' && '1' || '0' }}
         run: |
           cp downloaded-dmg/Codex.dmg ./Codex.dmg
           chmod +x install.sh

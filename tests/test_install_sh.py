@@ -244,6 +244,52 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
         self.assertIn("linux:{label:`File Manager`", patched)
         self.assertIn("open:async({path:e})=>du(e)", patched)
 
+    def test_linux_file_manager_patch_matches_dollar_prefixed_minified_names(self) -> None:
+        rule = self._load_patch_rule("linux-file-manager-handler")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "var $u=j$({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,"
+            "darwin:{detect:()=>`open`,args:$e=>$l($e)},win32:{label:`File Explorer`,"
+            "icon:`apps/file-explorer.png`,detect:$d,args:$e=>$l($e),open:async({path:$e})=>$o($e)}});"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn("var $u=j$(", patched)
+        self.assertIn("darwin:{detect:()=>`open`,args:$e=>$l($e)}", patched)
+        self.assertIn("detect:$d,args:$e=>$l($e)", patched)
+        self.assertIn("linux:{label:`File Manager`", patched)
+        self.assertIn("open:async({path:$e})=>$o($e)", patched)
+
+    def test_linux_file_manager_patch_matches_assignment_without_var(self) -> None:
+        rule = self._load_patch_rule("linux-file-manager-handler")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "Ih=rh({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,"
+            "darwin:{detect:()=>`open`,args:e=>km(e)},win32:{label:`File Explorer`,"
+            "icon:`apps/file-explorer.png`,detect:Lh,args:e=>km(e),open:async({path:e})=>Rh(e)}});"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn("Ih=rh(", patched)
+        self.assertIn("darwin:{detect:()=>`open`,args:e=>km(e)}", patched)
+        self.assertIn("detect:Lh,args:e=>km(e)", patched)
+        self.assertIn("linux:{label:`File Manager`", patched)
+        self.assertIn("open:async({path:e})=>Rh(e)", patched)
+
     def test_linux_window_menu_rules_apply(self) -> None:
         auto_hide_rule = self._load_patch_rule("linux-window-auto-hide-menu")
         hide_menu_rule = self._load_patch_rule("linux-window-hide-menu-bar")
@@ -283,6 +329,42 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
 
         self.assertIn("process.platform===`linux`&&k.setMenuBarVisibility(!1),", patched)
         self.assertIn("process.platform===`win32`&&k.removeMenu(),", patched)
+
+    def test_linux_avatar_overlay_defaults_to_pointer_interactive(self) -> None:
+        rule = self._load_patch_rule("linux-avatar-overlay-default-pointer-interactive")
+        module = self._load_apply_patch_bundle_module()
+
+        cases = (
+            (
+                "this.rendererReady=this.windowManager.isWebContentsReady(n.webContents.id),"
+                "this.pointerInteractive=!1,this.mousePassthroughEnabled=!1,"
+                "process.platform===`darwin`?n.setVisibleOnAllWorkspaces(!0,{visibleOnFullScreen:!0,"
+                "skipTransformProcessType:!0}):n.setVisibleOnAllWorkspaces(!0),"
+            ),
+            (
+                "this.rendererReady=this.windowManager.isWebContentsReady(t.webContents.id),"
+                "this.dragState=null,this.layout=null,this.mascotSize=gO,"
+                "this.mousePassthroughEnabled=!1,this.placement=`top-end`,"
+                "this.pointerInteractive=!1,this.traySize=null,"
+                "process.platform===`darwin`?t.setVisibleOnAllWorkspaces(!0,{visibleOnFullScreen:!0,"
+                "skipTransformProcessType:!0}):t.setVisibleOnAllWorkspaces(!0),"
+            ),
+        )
+
+        for original in cases:
+            with self.subTest(original=original):
+                with TemporaryDirectory() as temp_dir:
+                    file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_text(original, encoding="utf-8")
+                    module.apply_rule(rule, Path(temp_dir))
+                    patched = file_path.read_text(encoding="utf-8")
+
+                self.assertIn(
+                    "this.pointerInteractive=process.platform===`linux`",
+                    patched,
+                )
+                self.assertIn("this.mousePassthroughEnabled=!1", patched)
 
     def test_linux_file_manager_file_open_uses_parent_directory_on_linux(self) -> None:
         rule = self._load_patch_rule("linux-file-manager-open-file-parent-directory")
@@ -325,6 +407,27 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
         self.assertIn("__codexParentDirIndex", patched)
         self.assertIn("await n.shell.openPath(__codexParentDir)", patched)
         self.assertIn("n.shell.showItemInFolder(t);return", patched)
+
+    def test_linux_file_manager_file_open_matches_dollar_prefixed_names(self) -> None:
+        rule = self._load_patch_rule("linux-file-manager-open-file-parent-directory")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "async function $o($e){let $t=$f($e);if($t&&(0,$s.statSync)($t).isFile()){"
+            "$n.shell.showItemInFolder($t);return}let $r=$t??$e,$i=await $n.shell.openPath($r);if($i)throw Error($i)}"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn("if(process.platform===`linux`)", patched)
+        self.assertIn("__codexParentDirIndex", patched)
+        self.assertIn("await $n.shell.openPath(__codexParentDir)", patched)
+        self.assertIn("$n.shell.showItemInFolder($t);return", patched)
 
     def test_linux_opaque_windows_default_patch_applies_to_code_theme_bundle(self) -> None:
         rule = self._load_patch_rule("linux-opaque-windows-default-code-theme")

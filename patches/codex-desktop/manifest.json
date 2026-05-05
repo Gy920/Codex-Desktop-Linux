@@ -76,15 +76,15 @@
     {
       "name": "linux-file-manager-handler",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "var (\\w+)=([\\w$]+)\\(\\{id:`fileManager`,label:`Finder`,icon:`apps/finder\\.png`,kind:`fileManager`,darwin:\\{detect:\\(\\)=>`open`,args:(\\w+)=>(\\w+)\\(\\3\\)\\},win32:\\{label:`File Explorer`,icon:`apps/file-explorer\\.png`,detect:(\\w+),args:\\3=>\\4\\(\\3\\),open:async\\(\\{path:\\3\\}\\)=>(\\w+)\\(\\3\\)\\}\\}\\);",
-      "replace": "var \\1=\\2({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,darwin:{detect:()=>`open`,args:\\3=>\\4(\\3)},win32:{label:`File Explorer`,icon:`apps/file-explorer.png`,detect:\\5,args:\\3=>\\4(\\3),open:async({path:\\3})=>\\6(\\3)},linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`,args:\\3=>[\\3],open:async({path:\\3})=>\\6(\\3)}});",
+      "find_regex": "((?:var |let |const )?[A-Za-z_$][\\w$]*=)([A-Za-z_$][\\w$]*)\\(\\{id:`fileManager`,label:`Finder`,icon:`apps/finder\\.png`,kind:`fileManager`,darwin:\\{detect:\\(\\)=>`open`,args:([A-Za-z_$][\\w$]*)=>([A-Za-z_$][\\w$]*)\\(\\3\\)\\},win32:\\{label:`File Explorer`,icon:`apps/file-explorer\\.png`,detect:([A-Za-z_$][\\w$]*),args:\\3=>\\4\\(\\3\\),open:async\\(\\{path:\\3\\}\\)=>([A-Za-z_$][\\w$]*)\\(\\3\\)\\}\\}\\);",
+      "replace": "\\1\\2({id:`fileManager`,label:`Finder`,icon:`apps/finder.png`,kind:`fileManager`,darwin:{detect:()=>`open`,args:\\3=>\\4(\\3)},win32:{label:`File Explorer`,icon:`apps/file-explorer.png`,detect:\\5,args:\\3=>\\4(\\3),open:async({path:\\3})=>\\6(\\3)},linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`,args:\\3=>[\\3],open:async({path:\\3})=>\\6(\\3)}});",
       "count": 1,
       "already_contains": "linux:{label:`File Manager`,icon:`apps/file-explorer.png`,detect:()=>`linux-file-manager`"
     },
     {
       "name": "linux-file-manager-open-file-parent-directory",
       "glob": ".vite/build/main-*.js",
-      "find_regex": "async function (\\w+)\\((\\w+)\\)\\{let (\\w+)=(\\w+)\\(\\2\\);if\\(\\3&&\\(0,(\\w+)\\.statSync\\)\\(\\3\\)\\.isFile\\(\\)\\)\\{(\\w+)\\.shell\\.showItemInFolder\\(\\3\\);return\\}let (\\w+)=\\3\\?\\?\\2,(\\w+)=await \\6\\.shell\\.openPath\\(\\7\\);if\\(\\8\\)throw Error\\(\\8\\)\\}",
+      "find_regex": "async function ([A-Za-z_$][\\w$]*)\\(([A-Za-z_$][\\w$]*)\\)\\{let ([A-Za-z_$][\\w$]*)=([A-Za-z_$][\\w$]*)\\(\\2\\);if\\(\\3&&\\(0,([A-Za-z_$][\\w$]*)\\.statSync\\)\\(\\3\\)\\.isFile\\(\\)\\)\\{([A-Za-z_$][\\w$]*)\\.shell\\.showItemInFolder\\(\\3\\);return\\}let ([A-Za-z_$][\\w$]*)=\\3\\?\\?\\2,([A-Za-z_$][\\w$]*)=await \\6\\.shell\\.openPath\\(\\7\\);if\\(\\8\\)throw Error\\(\\8\\)\\}",
       "replace": "async function \\1(\\2){let \\3=\\4(\\2);if(\\3&&(0,\\5.statSync)(\\3).isFile()){if(process.platform===`linux`){let __codexParentDirIndex=\\3.lastIndexOf(`/`),__codexParentDir=__codexParentDirIndex>0?\\3.slice(0,__codexParentDirIndex):__codexParentDirIndex===0?`/`:\\3,__codexOpenParentResult=await \\6.shell.openPath(__codexParentDir);if(__codexOpenParentResult)throw Error(__codexOpenParentResult);return}\\6.shell.showItemInFolder(\\3);return}let \\7=\\3??\\2,\\8=await \\6.shell.openPath(\\7);if(\\8)throw Error(\\8)}",
       "count": 1,
       "already_contains": "if(process.platform===`linux`){let __codexParentDirIndex="
@@ -104,6 +104,14 @@
       "replace": "process.platform===`linux`&&\\1.setMenuBarVisibility(!1),process.platform===`win32`&&\\1.removeMenu(),",
       "count": [1, 2],
       "already_contains_regex": "process\\.platform===`linux`&&\\w+\\.setMenuBarVisibility\\(!1\\),process\\.platform===`win32`&&\\w+\\.removeMenu\\(\\),"
+    },
+    {
+      "name": "linux-avatar-overlay-default-pointer-interactive",
+      "glob": ".vite/build/main-*.js",
+      "find_regex": "this\\.rendererReady=this\\.windowManager\\.isWebContentsReady\\(([A-Za-z_$][\\w$]*)\\.webContents\\.id\\),(?:(this\\.dragState=null,this\\.layout=null,this\\.mascotSize=[A-Za-z_$][\\w$]*,)?this\\.mousePassthroughEnabled=!1,(this\\.placement=`top-end`,)?this\\.pointerInteractive=!1,|this\\.pointerInteractive=!1,this\\.mousePassthroughEnabled=!1,)",
+      "replace": "this.rendererReady=this.windowManager.isWebContentsReady(\\1.webContents.id),\\2this.mousePassthroughEnabled=!1,\\3this.pointerInteractive=process.platform===`linux`,",
+      "count": 1,
+      "already_contains_regex": "this\\.pointerInteractive=process\\.platform===`linux`"
     },
     {
       "name": "linux-opaque-windows-default-code-theme",
