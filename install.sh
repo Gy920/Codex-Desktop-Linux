@@ -38,6 +38,44 @@ ICON_SOURCE="$SCRIPT_DIR/assets/codex.png"
 . "$SCRIPT_DIR/scripts/lib/linux-features.sh"
 . "$SCRIPT_DIR/scripts/lib/rebuild-report.sh"
 
+resolve_runtime_lib() {
+    local lib_name="$1"
+    local compiler=""
+    local resolved=""
+
+    for compiler in "${CXX:-}" "${CC:-}" g++ gcc c++ cc; do
+        [ -n "$compiler" ] || continue
+        command -v "$compiler" >/dev/null 2>&1 || continue
+        resolved="$("$compiler" -print-file-name="$lib_name" 2>/dev/null || true)"
+        if [ -n "$resolved" ] && [ "$resolved" != "$lib_name" ] && [ -e "$resolved" ]; then
+            readlink -f "$resolved"
+            return 0
+        fi
+    done
+
+    resolved="$(ldconfig -p 2>/dev/null | awk -v lib="$lib_name" '$1 == lib { print $NF; exit }')"
+    if [ -n "$resolved" ] && [ -e "$resolved" ]; then
+        readlink -f "$resolved"
+        return 0
+    fi
+
+    return 1
+}
+
+bundle_runtime_libs() {
+    local compat_dir="$INSTALL_DIR/lib"
+    local lib=""
+    local src=""
+
+    mkdir -p "$compat_dir"
+    for lib in libstdc++.so.6 libgcc_s.so.1; do
+        src="$(resolve_runtime_lib "$lib" || true)"
+        [ -n "$src" ] || error "Could not locate runtime library: $lib"
+        cp -L "$src" "$compat_dir/$lib"
+        info "Bundled runtime library: $lib"
+    done
+}
+
 # ---- Create start script ----
 create_start_script() {
     local quoted_app_id
@@ -109,6 +147,7 @@ main() {
     download_electron
     extract_webview "$app_dir"
     install_app
+    bundle_runtime_libs
     install_bundled_plugin_resources "$app_dir"
     run_linux_feature_stage_hooks "$app_dir"
     create_start_script
