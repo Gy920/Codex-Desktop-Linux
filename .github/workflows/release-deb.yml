@@ -245,9 +245,22 @@ jobs:
             unzip \
             xz-utils
 
-          export PATH="$HOME/.cargo/bin:$PATH"
-          SEVENZIP_SYSTEM_INSTALL=1 bash scripts/install-deps.sh
+          case "$(uname -m)" in
+            x86_64) sevenzip_arch="x64" ;;
+            aarch64) sevenzip_arch="arm64" ;;
+            *)
+              echo "Unsupported CI arch for 7zz bootstrap: $(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          curl -fL "https://www.7-zip.org/a/7z2600-linux-${sevenzip_arch}.tar.xz" -o /tmp/7z.tar.xz
+          tar -C /tmp -xf /tmp/7z.tar.xz 7zz
+          install -m 755 /tmp/7zz /usr/local/bin/7zz
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
 
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
             apt_retry apt-get install -y gnupg lsb-release
