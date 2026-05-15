@@ -263,20 +263,14 @@ jobs:
           echo "/usr/local/bin" >> "$GITHUB_PATH"
 
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
-            apt_retry apt-get install -y gnupg lsb-release
-            curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
-              | gpg --dearmor > /usr/share/keyrings/llvm.gpg
-            echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/focal/ llvm-toolchain-focal-18 main" \
-              > /etc/apt/sources.list.d/llvm.list
-            apt_retry apt-get update
-            apt_retry apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev binutils
+            apt_retry apt-get install -y gcc-10 g++-10 binutils
             printf '%s\n' \
               '#include <compare>' \
               '#include <concepts>' \
               '#include <ranges>' \
               '#include <source_location>' \
               'int main(){static_assert(std::three_way_comparable_with<int,int>);auto order=(1 <=> 2);auto v=std::views::iota(0,3);auto loc=std::source_location::current();return (order < 0 && *v.begin()==0 && loc.line()>0) ? 0 : 1;}' \
-              | clang++-18 -std=c++20 -stdlib=libc++ -x c++ - -o /tmp/codex-ci-toolchain-check
+              | g++-10 -std=gnu++20 -x c++ - -o /tmp/codex-ci-toolchain-check
           fi
 
       - name: Download latest DMG artifact
@@ -292,10 +286,10 @@ jobs:
           CODEX_FORCE_SOURCE_NATIVE_MODULES: ${{ matrix.ubuntu_version == '20.04' && '1' || '0' }}
         run: |
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
-            export CC=clang-18
-            export CXX=clang++-18
-            export npm_config_cc=clang-18
-            export npm_config_cxx=clang++-18
+            export CC=gcc-10
+            export CXX=g++-10
+            export npm_config_cc=gcc-10
+            export npm_config_cxx=g++-10
           fi
           cp downloaded-dmg/Codex.dmg ./Codex.dmg
           chmod +x install.sh
