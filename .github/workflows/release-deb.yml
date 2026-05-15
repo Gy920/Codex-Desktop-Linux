@@ -290,11 +290,13 @@ jobs:
           npm_config_python: /usr/bin/python3
           CODEX_FORCE_DOWNLOADED_7ZIP: "1"
           CODEX_FORCE_SOURCE_NATIVE_MODULES: ${{ matrix.ubuntu_version == '20.04' && '1' || '0' }}
-          CC: ${{ matrix.ubuntu_version == '20.04' && 'clang-18' || '' }}
-          CXX: ${{ matrix.ubuntu_version == '20.04' && 'clang++-18' || '' }}
-          npm_config_cc: ${{ matrix.ubuntu_version == '20.04' && 'clang-18' || '' }}
-          npm_config_cxx: ${{ matrix.ubuntu_version == '20.04' && 'clang++-18' || '' }}
         run: |
+          if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
+            export CC=clang-18
+            export CXX=clang++-18
+            export npm_config_cc=clang-18
+            export npm_config_cxx=clang++-18
+          fi
           cp downloaded-dmg/Codex.dmg ./Codex.dmg
           chmod +x install.sh
           ./install.sh
