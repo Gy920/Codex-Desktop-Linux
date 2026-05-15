@@ -344,7 +344,14 @@ jobs:
           PY
 
       - name: Build Debian package
-        run: ./scripts/build-deb.sh
+        run: |
+          if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
+            export CC=gcc-11
+            export CXX=g++-11
+            export npm_config_cc=gcc-11
+            export npm_config_cxx=g++-11
+          fi
+          ./scripts/build-deb.sh
 
       - name: Rename Debian package for release
         env:
