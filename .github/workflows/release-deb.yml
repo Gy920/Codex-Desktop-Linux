@@ -238,13 +238,16 @@ jobs:
             ca-certificates \
             curl \
             git \
+            sudo \
             p7zip-full \
             python3 \
-            rustc \
-            cargo \
             tar \
             unzip \
             xz-utils
+
+          export PATH="$HOME/.cargo/bin:$PATH"
+          SEVENZIP_SYSTEM_INSTALL=1 bash scripts/install-deps.sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
             apt_retry apt-get install -y gnupg lsb-release
