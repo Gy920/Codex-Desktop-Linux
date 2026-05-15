@@ -1,0 +1,41 @@
+name: PR Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "codex/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - name: Run upstream CI checks
+        run: |
+          set -euo pipefail
+          cargo fmt --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo check --workspace --all-targets
+          cargo test --workspace --all-targets
+          bash tests/scripts_smoke.sh
