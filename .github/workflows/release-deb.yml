@@ -238,6 +238,7 @@ jobs:
             ca-certificates \
             curl \
             git \
+            p7zip-full \
             python3 \
             rustc \
             cargo \
@@ -271,6 +272,7 @@ jobs:
       - name: Build Linux app from downloaded DMG
         env:
           npm_config_python: /usr/bin/python3
+          CODEX_FORCE_DOWNLOADED_7ZIP: "1"
           CODEX_FORCE_SOURCE_NATIVE_MODULES: ${{ matrix.ubuntu_version == '20.04' && '1' || '0' }}
         run: |
           cp downloaded-dmg/Codex.dmg ./Codex.dmg
