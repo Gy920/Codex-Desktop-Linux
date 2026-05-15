@@ -133,50 +133,105 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
             "install.sh should patch extracted webview assets for unpackaged runs",
         )
 
+    def test_latest_css_without_mono_default_does_not_fail_font_patch(self) -> None:
+        rules = [
+            self._load_patch_rule("inject-font-import-and-sans-stack"),
+            self._load_patch_rule("use-bundled-mono-stack"),
+            self._load_patch_rule("prefer-bundled-mono-default"),
+        ]
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            '@layer theme{:root,:host{--font-sans:var(--vscode-font-family,var(--font-sans-default));'
+            "--font-mono:var(--vscode-editor-font-family,var(--font-mono-default));"
+            "--color-red-300:oklch(80.8% .114 19.571);}}"
+            ":is([data-codex-window-type=browser],[data-codex-window-type=electron]) body{"
+            '--vscode-editor-font-family:ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;}'
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "webview" / "assets" / "app-main-test.css"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            for rule in rules:
+                module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn('@import "./codex-fonts.css";', patched)
+        self.assertIn(
+            '--font-sans:var(--vscode-font-family,"Codex Sans",var(--font-sans-default));',
+            patched,
+        )
+        self.assertIn(
+            '--font-mono:var(--vscode-editor-font-family,"Codex Mono",var(--font-mono-default));',
+            patched,
+        )
+
     def test_linux_picker_patch_does_not_shadow_path_module(self) -> None:
         rule = self._load_patch_rule("linux-picker-resolve-parent-directory")
         module = self._load_apply_patch_bundle_module()
 
-        original = (
-            "async resolveWorkspaceRoot(e){try{const t=L(e,this.host);"
-            "return(await(0,p.stat)(t)).isDirectory()?(0,i.resolve)(t):null}"
-            "catch(e){return J().warning(`Failed to stat workspace root`,"
-            "{safe:{},sensitive:{error:e}}),null}}"
+        cases = (
+            (
+                "async resolveWorkspaceRoot(e){try{const t=L(e,this.host);"
+                "return(await(0,p.stat)(t)).isDirectory()?(0,i.resolve)(t):null}"
+                "catch(e){return J().warning(`Failed to stat workspace root`,"
+                "{safe:{},sensitive:{error:e}}),null}}"
+            ),
+            (
+                "async resolveWorkspaceRoot(e){try{let t=oe(e,this.host);"
+                "return(await(0,h.stat)(t)).isDirectory()?i.resolve(t):null}"
+                "catch(e){return $().warning(`Failed to stat workspace root`,"
+                "{safe:{},sensitive:{error:e}}),null}}"
+            ),
         )
 
-        with TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(original, encoding="utf-8")
-            module.apply_rule(rule, Path(temp_dir))
-            patched = file_path.read_text(encoding="utf-8")
+        for original in cases:
+            with self.subTest(original=original):
+                with TemporaryDirectory() as temp_dir:
+                    file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_text(original, encoding="utf-8")
+                    module.apply_rule(rule, Path(temp_dir))
+                    patched = file_path.read_text(encoding="utf-8")
 
-        self.assertIn("__codexStat", patched)
-        self.assertIn("__codexParentDir", patched)
-        self.assertIn("(0,i.resolve)", patched)
+                self.assertIn("__codexStat", patched)
+                self.assertIn("__codexParentDir", patched)
+                self.assertIn("(0,i.resolve)", patched)
 
     def test_linux_picker_patch_self_heals_buggy_bundle(self) -> None:
         rule = self._load_patch_rule("linux-picker-resolve-parent-directory-self-heal")
         module = self._load_apply_patch_bundle_module()
 
-        buggy = (
-            "async resolveWorkspaceRoot(e){try{let t=L(e,this.host),i=await(0,p.stat)(t);"
-            "if(i.isDirectory())return(0,i.resolve)(t);if(i.isFile()){let n=(0,i.dirname)(t),"
-            "o=await(0,p.stat)(n);if(o.isDirectory())return(0,i.resolve)(n)}return null}"
-            "catch(e){return J().warning(`Failed to stat workspace root`,"
-            "{safe:{},sensitive:{error:e}}),null}}"
+        cases = (
+            (
+                "async resolveWorkspaceRoot(e){try{let t=L(e,this.host),i=await(0,p.stat)(t);"
+                "if(i.isDirectory())return(0,i.resolve)(t);if(i.isFile()){let n=(0,i.dirname)(t),"
+                "o=await(0,p.stat)(n);if(o.isDirectory())return(0,i.resolve)(n)}return null}"
+                "catch(e){return J().warning(`Failed to stat workspace root`,"
+                "{safe:{},sensitive:{error:e}}),null}}"
+            ),
+            (
+                "async resolveWorkspaceRoot(e){try{let t=L(e,this.host),i=await(0,p.stat)(t);"
+                "if(i.isDirectory())return(0,i.resolve)(t);if(i.isFile()){let n=(0,i.dirname)(t),"
+                "o=await(0,p.stat)(n);if(o.isDirectory())return(0,i.resolve)(n)}return null}"
+                "catch(e){return $().warning(`Failed to stat workspace root`,"
+                "{safe:{},sensitive:{error:e}}),null}}"
+            ),
         )
 
-        with TemporaryDirectory() as temp_dir:
-            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(buggy, encoding="utf-8")
-            module.apply_rule(rule, Path(temp_dir))
-            patched = file_path.read_text(encoding="utf-8")
+        for buggy in cases:
+            with self.subTest(buggy=buggy):
+                with TemporaryDirectory() as temp_dir:
+                    file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_text(buggy, encoding="utf-8")
+                    module.apply_rule(rule, Path(temp_dir))
+                    patched = file_path.read_text(encoding="utf-8")
 
-        self.assertIn("__codexStat", patched)
-        self.assertIn("__codexParentDir", patched)
-        self.assertIn("(0,i.resolve)", patched)
+                self.assertIn("__codexStat", patched)
+                self.assertIn("__codexParentDir", patched)
+                self.assertIn("(0,i.resolve)", patched)
 
     def test_linux_file_manager_patch_adds_linux_target(self) -> None:
         rule = self._load_patch_rule("linux-file-manager-handler")
@@ -361,10 +416,46 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
             "if(process.platform===`linux`&&d===`local`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow)",
             patched,
         )
-        self.assertIn("e.preventDefault(),t.app.quit();return", patched)
+        self.assertIn('e.preventDefault(),require("electron").app.quit();return', patched)
         self.assertIn("process.platform===`win32`&&d===`local`", patched)
         self.assertIn("process.platform===`darwin`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow", patched)
         self.assertNotIn("let t=this.getPrimaryWindows(d).some", patched)
+
+    def test_linux_close_routes_latest_handler_through_quit_confirmation(self) -> None:
+        rule = self._load_patch_rule("linux-close-window-routes-through-quit-confirmation-latest")
+        module = self._load_apply_patch_bundle_module()
+
+        original = (
+            "b&&M.on(`close`,e=>{this.persistPrimaryWindowBounds(M);"
+            "let t=this.getPrimaryWindows().some(e=>e!==M);"
+            "if(process.platform===`win32`&&!this.isAppQuitting&&"
+            "this.options.canHideLastLocalWindowToTray?.()===!0&&!t){"
+            "e.preventDefault(),M.hide();return}"
+            "if(process.platform===`darwin`&&!this.isAppQuitting&&!t){"
+            "if(M.isFullScreen()){e.preventDefault(),M.once(`leave-full-screen`,()=>{"
+            "M.isDestroyed()||M.hide()}),M.setFullScreen(!1);return}"
+            "e.preventDefault(),M.hide()}});"
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / ".vite" / "build" / "main-test.js"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "let __codexHasOtherPrimaryWindow=this.getPrimaryWindows().some(e=>e!==M);",
+            patched,
+        )
+        self.assertIn(
+            "if(process.platform===`linux`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow)",
+            patched,
+        )
+        self.assertIn('e.preventDefault(),require("electron").app.quit();return', patched)
+        self.assertIn("process.platform===`win32`&&!this.isAppQuitting", patched)
+        self.assertIn("process.platform===`darwin`&&!this.isAppQuitting&&!__codexHasOtherPrimaryWindow", patched)
+        self.assertNotIn("let t=this.getPrimaryWindows().some", patched)
 
     def test_linux_avatar_overlay_defaults_to_pointer_interactive(self) -> None:
         rule = self._load_patch_rule("linux-avatar-overlay-default-pointer-interactive")
@@ -384,6 +475,15 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
                 "this.pointerInteractive=!1,this.traySize=null,"
                 "process.platform===`darwin`?t.setVisibleOnAllWorkspaces(!0,{visibleOnFullScreen:!0,"
                 "skipTransformProcessType:!0}):t.setVisibleOnAllWorkspaces(!0),"
+            ),
+            (
+                "this.rendererReady=this.windowManager.isWebContentsReady(e.webContents.id),"
+                "this.dragState=null,this.layout=null,this.mascotSize=vU,"
+                "this.mascotResizeState=null,this.ignoreMascotElementSizeUntilMs=0,"
+                "this.expectedMascotSizeAfterResize=null,this.mousePassthroughEnabled=!1,"
+                "this.placement=`top-end`,this.pointerInteractive=!1,this.traySize=null,"
+                "process.platform===`darwin`?e.setVisibleOnAllWorkspaces(!0,{visibleOnFullScreen:!0,"
+                "skipTransformProcessType:!0}):e.setVisibleOnAllWorkspaces(!0),"
             ),
         )
 
@@ -482,6 +582,26 @@ class InstallScriptStartScriptTemplateTests(unittest.TestCase):
 
         self.assertIn("navigator.userAgentData?.platform??navigator.platform??navigator.userAgent", patched)
         self.assertIn(".toLowerCase().includes(`linux`)", patched)
+
+    def test_linux_opaque_windows_resolved_theme_patch_is_optional(self) -> None:
+        rule = self._load_patch_rule("linux-opaque-windows-default-resolved-theme")
+        module = self._load_apply_patch_bundle_module()
+
+        original = "export const unrelated=`no opaque windows here`;"
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = (
+                Path(temp_dir)
+                / "webview"
+                / "assets"
+                / "use-resolved-theme-variant-test-abc.js"
+            )
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(original, encoding="utf-8")
+            module.apply_rule(rule, Path(temp_dir))
+            patched = file_path.read_text(encoding="utf-8")
+
+        self.assertEqual(original, patched)
 
 
 if __name__ == "__main__":
