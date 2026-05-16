@@ -6,7 +6,7 @@ Before opening a pull request, please read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Linux features
 
-Optional Linux-only additions live in `linux-features/`. Use them for integrations that are useful for some users but should not become mandatory core patches. Copy `linux-features/features.example.json` to the git-ignored `linux-features/features.json` before building; enabled features are applied during the install/build pipeline. See [`linux-features/README.md`](linux-features/README.md) for the feature contract.
+Linux-only additions live in `linux-features/`. Some ship enabled by default, while others remain optional and can be listed in the git-ignored `linux-features/features.json` before building. Enabled features are applied during the install/build pipeline. See [`linux-features/README.md`](linux-features/README.md) for the feature contract.
 
 ## Supported platforms
 
@@ -33,7 +33,7 @@ Anything systemd-based should work for the optional auto-updater service (`syste
 | Linux browser annotations | ✅ always | Stored-anchor screenshots, isolated marker rendering |
 | Chrome plugin native host | ✅ always | Auto-installs the upstream Chrome plugin plus Linux native-messaging support for Chrome, Brave, and Chromium |
 | Linux Computer Use | ⚠️ opt-in | MCP backend registers by default; the in-app UI is opt-in. Supports screenshots, accessibility, window targeting, and input synthesis |
-| Mobile remote control host | 🧪 opt-in experiment | SSH remote projects work normally. Phone/Android host access is upstream macOS-only by default; `linux-features/remote-mobile-control` adds experimental Linux device-key, visibility, and host-enablement patches |
+| Mobile remote control host | 🧪 default-on experiment | SSH remote projects work normally. Phone/Android host access is upstream macOS-only by default; `linux-features/remote-mobile-control` adds experimental Linux device-key, visibility, and host-enablement patches |
 | Server-gated features (e.g. `gpt-5.5`) | 🟡 server-side | OpenAI rolls per-account, not project-controlled. Building a fresh package does not unlock these. |
 
 ## Before you install

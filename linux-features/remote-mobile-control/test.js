@@ -62,13 +62,18 @@ function withFeatureRootEnv(root, fn) {
   }
 }
 
-test("remote mobile control feature stays disabled until listed in features.json", () => {
+test("remote mobile control feature is enabled by default from feature.json", () => {
   withTempFeatureRoot([], (root) => {
-    assert.deepEqual(loadLinuxFeaturePatchDescriptors({ featuresRoot: root }), []);
+    const descriptors = loadLinuxFeaturePatchDescriptors({ featuresRoot: root });
+    assert.deepEqual(descriptors.map((descriptor) => descriptor.id), [
+      "feature:remote-mobile-control:linux-remote-control-device-key",
+      "feature:remote-mobile-control:linux-remote-control-preserve-config",
+      "feature:remote-mobile-control:linux-remote-control-visibility",
+    ]);
   });
 });
 
-test("remote mobile control feature exposes opt-in main-bundle and webview patches", () => {
+test("remote mobile control feature stays enabled when explicitly listed in features.json", () => {
   withTempFeatureRoot(["remote-mobile-control"], (root) => {
     const descriptors = loadLinuxFeaturePatchDescriptors({ featuresRoot: root });
     assert.deepEqual(descriptors.map((descriptor) => descriptor.id), [
