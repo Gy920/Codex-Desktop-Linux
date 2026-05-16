@@ -70,12 +70,23 @@ main() {
 	stage_optional_update_builder_bundle "$staging_root"
 	write_launcher_stub "$staging_root"
 
+	local package_name
+	local pacman_pkgver
+	local pacman_pkgrel
+	local staging_dir
+	local arch_replacement
+	package_name="$(sed_escape_replacement "$PACKAGE_NAME")"
+	pacman_pkgver="$(sed_escape_replacement "$PACMAN_PKGVER")"
+	pacman_pkgrel="$(sed_escape_replacement "$PACMAN_PKGREL")"
+	staging_dir="$(sed_escape_replacement "$staging_root")"
+	arch_replacement="$(sed_escape_replacement "$arch")"
+
 	sed \
-		-e "s/__PACKAGE_NAME__/$PACKAGE_NAME/g" \
-		-e "s/__PKGVER__/$PACMAN_PKGVER/g" \
-		-e "s/__PKGREL__/$PACMAN_PKGREL/g" \
-		-e "s|__STAGING_DIR__|$staging_root|g" \
-		-e "s/__ARCH__/$arch/g" \
+		-e "s/__PACKAGE_NAME__/$package_name/g" \
+		-e "s/__PKGVER__/$pacman_pkgver/g" \
+		-e "s/__PKGREL__/$pacman_pkgrel/g" \
+		-e "s|__STAGING_DIR__|$staging_dir|g" \
+		-e "s/__ARCH__/$arch_replacement/g" \
 		"$PKGBUILD_TEMPLATE" >"$build_root/PKGBUILD"
 	if package_with_updater_enabled; then
 		sed -e "s|/opt/codex-desktop|/opt/$PACKAGE_NAME|g" \

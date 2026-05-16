@@ -52,7 +52,7 @@ if [ -z "$$format" ]; then \
 fi; \
 printf '%s\n' "$$format"
 
-.PHONY: help check test build-updater maybe-build-updater update rebuild rebuild-install inspect-upstream build-app rebuild-next run-app build-dev-app run-dev-app deb rpm pacman package install service-enable service-status clean-dist clean-state
+.PHONY: help check test build-updater maybe-build-updater update rebuild rebuild-install inspect-upstream build-app build-app-fresh bootstrap-native install-native update-native rebuild-next run-app build-dev-app run-dev-app deb rpm pacman package install service-enable service-status clean-dist clean-state
 
 help:
 	@printf '\nCodex Desktop Linux Make Targets\n\n'
@@ -63,7 +63,11 @@ help:
 	@printf '  %-18s %s\n' "make rebuild" "Inspect a DMG and build a side-by-side candidate"
 	@printf '  %-18s %s\n' "make rebuild-install" "Find a DMG, rebuild, and install into codex-app/"
 	@printf '  %-18s %s\n' "make inspect-upstream" "Inspect a DMG and write rebuild reports without changing codex-app/"
-	@printf '  %-18s %s\n' "make build-app" "Run install.sh and regenerate codex-app/"
+	@printf '  %-18s %s\n' "make build-app" "Run install.sh and regenerate codex-app/ (reuses cached Codex.dmg)"
+	@printf '  %-18s %s\n' "make build-app-fresh" "Remove cached Codex.dmg and regenerate codex-app/"
+	@printf '  %-18s %s\n' "make bootstrap-native" "Install deps, fresh-build, package, and install"
+	@printf '  %-18s %s\n' "make install-native" "Fresh-build, package, and install"
+	@printf '  %-18s %s\n' "make update-native" "Pull trusted checkout, fresh-build, package, and install"
 	@printf '  %-18s %s\n' "make rebuild-next" "Build a side-by-side candidate in codex-app-next/"
 	@printf '  %-18s %s\n' "make run-app" "Launch the local generated Electron app from codex-app/"
 	@printf '  %-18s %s\n' "make build-dev-app" "Build a side-by-side test app with a distinct app id/bin"
@@ -94,6 +98,10 @@ help:
 	@printf '  %s\n' "make rebuild-install"
 	@printf '  %s\n' "make rebuild DMG=/tmp/Codex.dmg"
 	@printf '  %s\n' "make build-app DMG=/tmp/Codex.dmg"
+	@printf '  %s\n' "make build-app-fresh"
+	@printf '  %s\n' "make bootstrap-native"
+	@printf '  %s\n' "make install-native"
+	@printf '  %s\n' "PACKAGE_WITH_UPDATER=0 make update-native"
 	@printf '  %s\n' "make inspect-upstream DMG=/tmp/Codex.dmg"
 	@printf '  %s\n' "make rebuild-next DMG=/tmp/Codex.dmg"
 	@printf '  %s\n' "make run-app"
@@ -147,6 +155,26 @@ inspect-upstream:
 build-app:
 	@echo "[make] Regenerating codex-app from DMG"
 	./install.sh "$(DMG)"
+
+build-app-fresh:
+	@echo "[make] Regenerating codex-app from fresh DMG"
+	./install.sh --fresh "$(DMG)"
+
+bootstrap-native:
+	@echo "[make] Installing native build dependencies"
+	bash scripts/install-deps.sh
+	PATH="$$HOME/.cargo/bin:$$PATH" $(MAKE) install-native
+
+install-native:
+	$(MAKE) build-app-fresh
+	$(MAKE) package
+	$(MAKE) install
+	@echo "[make] Native package install complete"
+
+update-native:
+	@echo "[make] Updating trusted checkout"
+	git pull --ff-only
+	$(MAKE) install-native
 
 rebuild-next:
 	@echo "[make] Building side-by-side rebuild candidate"
@@ -204,37 +232,44 @@ package: maybe-build-updater
 
 install:
 	@echo "[make] Installing latest native package"
-	@format="$$( $(NATIVE_PKG_FORMAT_CMD) )"; \
+	@latest_matching_file() { \
+		local pattern="$$1"; \
+		local matches; \
+		matches="$$(compgen -G "$$pattern" || true)"; \
+		[ -n "$$matches" ] || return 0; \
+		printf '%s\n' "$$matches" | sort -V | tail -n 1; \
+	}; \
+	format="$$( $(NATIVE_PKG_FORMAT_CMD) )"; \
 	if [ "$$format" = "pacman" ]; then \
-		pkg="$${PKG:-$$(ls -1 $(PACMAN_GLOB) 2>/dev/null | sort -V | tail -n 1)}"; \
+		pkg="$${PKG:-$$(latest_matching_file "$(PACMAN_GLOB)")}"; \
 		if [ -z "$$pkg" ]; then \
 			echo "[make] No pacman package found. Run 'make pacman' first." >&2; exit 1; \
 		fi; \
 		echo "[make] Installing $$pkg"; \
 		sudo pacman -U --noconfirm "$$pkg"; \
 	elif [ "$$format" = "rpm" ] && command -v dnf >/dev/null 2>&1; then \
-		rpm="$${RPM:-$$(ls -1 $(RPM_GLOB) 2>/dev/null | sort -V | tail -n 1)}"; \
+		rpm="$${RPM:-$$(latest_matching_file "$(RPM_GLOB)")}"; \
 		if [ -z "$$rpm" ]; then \
 			echo "[make] No RPM package found. Run 'make rpm' first." >&2; exit 1; \
 		fi; \
 		echo "[make] Installing $$rpm"; \
 		sudo dnf install -y "$$rpm"; \
 	elif [ "$$format" = "rpm" ] && command -v zypper >/dev/null 2>&1; then \
-		rpm="$${RPM:-$$(ls -1 $(RPM_GLOB) 2>/dev/null | sort -V | tail -n 1)}"; \
+		rpm="$${RPM:-$$(latest_matching_file "$(RPM_GLOB)")}"; \
 		if [ -z "$$rpm" ]; then \
 			echo "[make] No RPM package found. Run 'make rpm' first." >&2; exit 1; \
 		fi; \
 		echo "[make] Installing $$rpm"; \
 		sudo zypper --non-interactive --no-gpg-checks install -y "$$rpm"; \
 	elif [ "$$format" = "rpm" ]; then \
-		rpm="$${RPM:-$$(ls -1 $(RPM_GLOB) 2>/dev/null | sort -V | tail -n 1)}"; \
+		rpm="$${RPM:-$$(latest_matching_file "$(RPM_GLOB)")}"; \
 		if [ -z "$$rpm" ]; then \
 			echo "[make] No RPM package found. Run 'make rpm' first." >&2; exit 1; \
 		fi; \
 		echo "[make] Installing $$rpm"; \
 		sudo rpm -Uvh "$$rpm"; \
 	elif [ "$$format" = "deb" ]; then \
-		deb="$${DEB:-$$(ls -1 $(DEB_GLOB) 2>/dev/null | sort -V | tail -n 1)}"; \
+		deb="$${DEB:-$$(latest_matching_file "$(DEB_GLOB)")}"; \
 		if [ -z "$$deb" ]; then \
 			echo "[make] No Debian package found. Run 'make deb' first." >&2; exit 1; \
 		fi; \

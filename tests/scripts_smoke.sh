@@ -432,8 +432,9 @@ test_pacman_builder_without_updater_transition_hook() {
     local app_dir="$workspace/app"
     local dist_dir="$workspace/dist"
     local capture_dir="$workspace/capture"
+    local ampersand_tmpdir="$workspace/ampersand&tmp"
 
-    mkdir -p "$workspace" "$dist_dir" "$capture_dir"
+    mkdir -p "$workspace" "$dist_dir" "$capture_dir" "$ampersand_tmpdir"
     make_stub_bin_dir "$bin_dir"
     make_fake_app "$app_dir"
 
@@ -452,6 +453,7 @@ exit 99
 SCRIPT
     chmod +x "$bin_dir/makepkg" "$bin_dir/cargo"
 
+    TMPDIR="$ampersand_tmpdir" \
     PATH="$bin_dir:$PATH" \
     CAPTURE_DIR="$capture_dir" \
     APP_DIR_OVERRIDE="$app_dir" \
@@ -463,6 +465,8 @@ SCRIPT
     assert_file_exists "$dist_dir/codex-desktop-2026.03.24.120000-1-x86_64.pkg.tar.zst"
     assert_file_exists "$capture_dir/PKGBUILD"
     assert_file_exists "$capture_dir/codex-desktop.install"
+    assert_contains "$capture_dir/PKGBUILD" "ampersand&tmp"
+    assert_not_contains "$capture_dir/PKGBUILD" "__STAGING_DIR__"
     assert_contains "$capture_dir/PKGBUILD" "install=codex-desktop.install"
     assert_not_contains "$capture_dir/PKGBUILD" "'polkit'"
     assert_contains "$capture_dir/codex-desktop.install" "codex_no_updater_cleanup_update_manager_service"
@@ -526,6 +530,58 @@ SCRIPT
     second_line="$(sed -n '2p' "$install_log")"
     [ "$first_line" = "1" ] || fail "Expected make build-app to call install.sh with a single default argument slot, got: $(cat "$install_log")"
     [ -z "$second_line" ] || fail "Expected make build-app default DMG argument to be empty so install.sh falls back to reuse/download, got: $(cat "$install_log")"
+}
+
+test_make_build_app_fresh_uses_installer_fresh_flow() {
+    info "Checking make build-app-fresh DMG behavior"
+    local workspace="$TMP_DIR/make-build-app-fresh"
+    local install_log="$workspace/install-args.log"
+    local first_line
+    local second_line
+    local third_line
+
+    mkdir -p "$workspace"
+
+    cat > "$workspace/install.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+set -eu
+printf '%s\n' "$#" > "$TEST_INSTALL_LOG"
+for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$TEST_INSTALL_LOG"
+done
+SCRIPT
+    chmod +x "$workspace/install.sh"
+
+    TEST_INSTALL_LOG="$install_log" make -f "$REPO_DIR/Makefile" -C "$workspace" build-app-fresh >/dev/null
+
+    assert_file_exists "$install_log"
+    first_line="$(sed -n '1p' "$install_log")"
+    second_line="$(sed -n '2p' "$install_log")"
+    third_line="$(sed -n '3p' "$install_log")"
+    [ "$first_line" = "2" ] || fail "Expected make build-app-fresh to pass --fresh plus the default argument slot, got: $(cat "$install_log")"
+    [ "$second_line" = "--fresh" ] || fail "Expected make build-app-fresh to pass --fresh first, got: $(cat "$install_log")"
+    [ -z "$third_line" ] || fail "Expected make build-app-fresh default DMG argument to be empty, got: $(cat "$install_log")"
+}
+
+test_native_shortcut_targets_compose_existing_flows() {
+    info "Checking native install/update shortcut targets"
+    local install_log="$TMP_DIR/make-install-native.log"
+    local bootstrap_log="$TMP_DIR/make-bootstrap-native.log"
+    local update_log="$TMP_DIR/make-update-native.log"
+
+    make -n -C "$REPO_DIR" install-native >"$install_log"
+    assert_contains "$install_log" './install.sh --fresh'
+    assert_contains "$install_log" 'Building native package'
+    assert_contains "$install_log" 'Installing latest native package'
+
+    make -n -C "$REPO_DIR" bootstrap-native >"$bootstrap_log"
+    assert_contains "$bootstrap_log" 'bash scripts/install-deps.sh'
+    assert_contains "$bootstrap_log" 'PATH="$HOME/.cargo/bin:$PATH"'
+    assert_contains "$bootstrap_log" 'install-native'
+
+    make -n -C "$REPO_DIR" update-native >"$update_log"
+    assert_contains "$update_log" 'git pull --ff-only'
+    assert_contains "$update_log" 'install-native'
 }
 
 test_upstream_build_app_workflow_tracks_dmg_metadata() {
@@ -1002,7 +1058,7 @@ PY
     # bounded-execution defenses preserved (0.2 s watchdog + 2 s curl cap).
     assert_contains "$REPO_DIR/launcher/start.sh.template" '/dev/tcp/127.0.0.1/"$CODEX_LINUX_WEBVIEW_PORT"'
     assert_contains "$REPO_DIR/launcher/start.sh.template" "kill -9 \"\$probe_pid\""
-    assert_contains "$REPO_DIR/launcher/start.sh.template" 'curl --disable --silent --show-error --fail --max-time 2'
+    assert_contains "$REPO_DIR/launcher/start.sh.template" 'curl --disable --noproxy 127.0.0.1,localhost --silent --show-error --fail --max-time 2'
     assert_contains "$REPO_DIR/launcher/start.sh.template" "for attempt in \$(seq 1 250)"
     assert_contains "$REPO_DIR/launcher/start.sh.template" "sleep 0.02"
     assert_contains "$REPO_DIR/launcher/start.sh.template" "Webview origin verified."
@@ -2632,6 +2688,8 @@ main() {
     test_pacman_builder_without_updater_transition_hook
     test_missing_input_failure
     test_make_build_app_uses_installer_download_flow_by_default
+    test_make_build_app_fresh_uses_installer_fresh_flow
+    test_native_shortcut_targets_compose_existing_flows
     test_upstream_build_app_workflow_tracks_dmg_metadata
     test_installer_detects_electron_version_from_plist
     test_installer_keeps_electron_fallback_for_bad_metadata
