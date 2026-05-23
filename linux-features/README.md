@@ -1,12 +1,13 @@
 # Linux Features
 
-`linux-features/` contains opt-in Linux integration modules for this wrapper.
-These are not upstream Codex plugins; they are Linux-side extensions that can
-add ASAR patches, staged resources, or build/install hooks.
+`linux-features/` contains Linux integration modules for this wrapper. These
+are not upstream Codex plugins; they are Linux-side extensions that can add
+ASAR patches, staged resources, or build/install hooks.
 
-By default, no optional Linux features are enabled. Copy
+Some features can ship with `"defaultEnabled": true` in their `feature.json`
+manifest. Any remaining optional features can still be enabled by copying
 `features.example.json` to `features.json` before running `./install.sh` or
-building packages, then list the feature ids you want:
+building packages, then listing the feature ids you want:
 
 ```json
 {

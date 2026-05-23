@@ -64,9 +64,9 @@ const path = require("node:path");
 
 const helperPath = path.resolve(process.argv[2]);
 const targetPath = path.resolve(process.argv[3]);
-const { enabledLinuxFeatureIds } = require(helperPath);
+const { explicitLinuxFeatureIds } = require(helperPath);
 
-const enabled = enabledLinuxFeatureIds();
+const enabled = explicitLinuxFeatureIds(path.dirname(targetPath));
 if (enabled.length === 0) {
   fs.rmSync(targetPath, { force: true });
   process.exit(0);

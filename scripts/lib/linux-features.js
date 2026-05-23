@@ -61,8 +61,7 @@ function normalizeEnabledFeatureIds(value, sourcePath) {
   return ids;
 }
 
-function enabledLinuxFeatureIds(options = {}) {
-  const featuresRoot = linuxFeaturesRoot(options);
+function explicitLinuxFeatureIds(featuresRoot) {
   const configPath = linuxFeaturesConfigPath(featuresRoot);
   if (!fs.existsSync(configPath)) {
     return [];
@@ -73,6 +72,36 @@ function enabledLinuxFeatureIds(options = {}) {
     return [];
   }
   return normalizeEnabledFeatureIds(config.enabled, configPath);
+}
+
+function discoverLinuxFeatureManifests(featuresRoot) {
+  let entries;
+  try {
+    entries = fs.readdirSync(featuresRoot, { withFileTypes: true });
+  } catch (error) {
+    console.warn(`WARN: Could not read Linux features root at ${featuresRoot}: ${error.message}`);
+    return [];
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory() && FEATURE_ID_PATTERN.test(entry.name))
+    .map((entry) => loadLinuxFeatureManifest(featuresRoot, entry.name))
+    .filter(Boolean);
+}
+
+function defaultEnabledLinuxFeatureIds(featuresRoot) {
+  return discoverLinuxFeatureManifests(featuresRoot)
+    .filter((feature) => feature.manifest.defaultEnabled === true)
+    .map((feature) => feature.id);
+}
+
+function enabledLinuxFeatureIds(options = {}) {
+  const featuresRoot = linuxFeaturesRoot(options);
+  const enabledIds = new Set(defaultEnabledLinuxFeatureIds(featuresRoot));
+  for (const id of explicitLinuxFeatureIds(featuresRoot)) {
+    enabledIds.add(id);
+  }
+  return Array.from(enabledIds);
 }
 
 function loadLinuxFeatureManifest(featuresRoot, id) {
@@ -289,6 +318,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  explicitLinuxFeatureIds,
   enabledLinuxFeatureIds,
   enabledLinuxFeatureStageHooks,
   loadEnabledLinuxFeatures,

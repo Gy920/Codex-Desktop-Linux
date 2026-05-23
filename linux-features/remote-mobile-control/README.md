@@ -1,19 +1,11 @@
 # Experimental Remote Mobile Control
 
-This feature is disabled by default. It patches the upstream Codex Desktop main
+This feature is enabled by default. It patches the upstream Codex Desktop main
 bundle so Linux can try the mobile remote-control host flow that upstream
 currently limits to macOS.
 
-Enable it by adding the feature id to `linux-features/features.json` before
-building:
-
-```json
-{
-  "enabled": [
-    "remote-mobile-control"
-  ]
-}
-```
+You do not need to add it to `linux-features/features.json` for normal repo
+builds. That config is only needed if you want to add other optional features.
 
 For the Nix flake build, use the declarative app variant instead because the
 git-ignored `features.json` file is not part of the flake source:
