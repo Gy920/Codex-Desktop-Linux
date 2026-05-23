@@ -123,6 +123,26 @@ make_stub_bin_dir() {
     mkdir -p "$bin_dir"
 }
 
+init_bare_git_repo() {
+    local repo_path="$1"
+    local branch_name="$2"
+    if git init --bare --initial-branch="$branch_name" "$repo_path" >/dev/null 2>&1; then
+        return 0
+    fi
+    git init --bare "$repo_path" >/dev/null
+    git --git-dir="$repo_path" symbolic-ref HEAD "refs/heads/$branch_name"
+}
+
+checkout_test_branch() {
+    local repo_path="$1"
+    local branch_name="$2"
+    if git -C "$repo_path" rev-parse --verify "refs/remotes/origin/$branch_name" >/dev/null 2>&1; then
+        git -C "$repo_path" checkout -q -B "$branch_name" "origin/$branch_name"
+        return 0
+    fi
+    git -C "$repo_path" checkout -q -B "$branch_name"
+}
+
 test_common_helper_sourcing() {
     info "Checking shared packaging helpers"
     local probe_file="$TMP_DIR/probe.txt"
@@ -3787,10 +3807,11 @@ test_user_local_prepare_build_repo_overlays_committed_local_changes() {
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "main"
 
     cat > "$source_repo/tracked.txt" <<'EOF'
 base
@@ -3811,6 +3832,7 @@ EOF
     git clone "$origin_repo" "$upstream_repo" >/dev/null 2>&1
     git -C "$upstream_repo" config user.name "Smoke Test"
     git -C "$upstream_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$upstream_repo" "main"
     cat > "$upstream_repo/upstream.txt" <<'EOF'
 upstream-advanced
 EOF
@@ -3864,10 +3886,11 @@ test_user_local_prepare_build_repo_detects_default_branch_without_recorded_branc
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace" "$unmanaged_source"
-    git init --bare --initial-branch=master "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "master"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "master"
     cat > "$source_repo/branch.txt" <<'EOF'
 master-branch
 EOF
@@ -3915,10 +3938,11 @@ test_user_local_prepare_build_repo_ignores_stale_recorded_default_branch() {
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace" "$unmanaged_source"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "main"
     cat > "$source_repo/branch.txt" <<'EOF'
 main-branch
 EOF
@@ -3965,10 +3989,11 @@ test_user_local_prepare_build_repo_ignores_stale_source_origin_head() {
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "main"
     cat > "$source_repo/branch.txt" <<'EOF'
 main-branch
 EOF
@@ -4018,10 +4043,11 @@ test_user_local_prepare_build_repo_handles_relative_origin_url() {
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "main"
     cat > "$source_repo/relative.txt" <<'EOF'
 relative-origin
 EOF
@@ -4060,6 +4086,7 @@ EOF
         git clone "$origin_repo" "$updater_repo" >/dev/null 2>&1
         git -C "$updater_repo" config user.name "Smoke Test"
         git -C "$updater_repo" config user.email "smoke@example.com"
+        checkout_test_branch "$updater_repo" "main"
         cat > "$updater_repo/relative.txt" <<'EOF'
 relative-origin-updated
 EOF
@@ -4228,10 +4255,11 @@ test_user_local_prepare_build_repo_updates_existing_single_branch_fetch_refspec(
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace" "$unmanaged_source"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$upstream_repo" >/dev/null 2>&1
     git -C "$upstream_repo" config user.name "Smoke Test"
     git -C "$upstream_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$upstream_repo" "main"
     cat > "$upstream_repo/branch.txt" <<'EOF'
 main-branch
 EOF
@@ -4309,10 +4337,11 @@ test_user_local_prepare_build_repo_handles_deleted_overlay_paths() {
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "main"
 
     cat > "$source_repo/overlay.txt" <<'EOF'
 base
@@ -4362,10 +4391,11 @@ test_user_local_prepare_build_repo_removes_rename_source_paths() {
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "main"
 
     cat > "$source_repo/old-name.txt" <<'EOF'
 base
@@ -4414,10 +4444,11 @@ test_user_local_prepare_build_repo_skips_unmerged_overlay_paths() {
     local install_env="$workspace/install.env"
 
     mkdir -p "$workspace"
-    git init --bare --initial-branch=main "$origin_repo" >/dev/null
+    init_bare_git_repo "$origin_repo" "main"
     git clone "$origin_repo" "$source_repo" >/dev/null 2>&1
     git -C "$source_repo" config user.name "Smoke Test"
     git -C "$source_repo" config user.email "smoke@example.com"
+    checkout_test_branch "$source_repo" "main"
 
     cat > "$source_repo/conflict.txt" <<'EOF'
 base
