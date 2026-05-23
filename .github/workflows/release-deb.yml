@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - codex/dev-patch-fonts
   workflow_dispatch:
   schedule:
     - cron: "0 6 * * *"
@@ -29,6 +28,7 @@ jobs:
       electron_version: ${{ steps.collect_metadata.outputs.electron_version }}
       release_tag: ${{ steps.collect_metadata.outputs.release_tag }}
       release_name: ${{ steps.collect_metadata.outputs.release_name }}
+      release_stamp: ${{ steps.collect_metadata.outputs.release_stamp }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,7 +39,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Install build dependencies
         run: |
@@ -51,17 +51,11 @@ jobs:
             curl \
             git \
             python3 \
+            rustc \
+            cargo \
             tar \
             unzip \
             xz-utils
-
-          # The hosted ubuntu-24.04 runner already provides a modern enough GCC
-          # for install.sh to select a working C++20 toolchain. Avoid relying on
-          # Launchpad PPA availability in prepare-release.
-          if ! command -v gcc >/dev/null 2>&1 || ! command -v g++ >/dev/null 2>&1; then
-            echo "System GCC/G++ missing on ubuntu-24.04 runner" >&2
-            exit 1
-          fi
 
       - name: Build Linux app from latest DMG
         env:
@@ -90,14 +84,9 @@ jobs:
           codex_app_version="$(node -p "require('$meta_dir/package.json').version")"
           codex_build_number="$(node -p "require('$meta_dir/package.json').codexBuildNumber || ''")"
           electron_version="$(tr -d '\n' < codex-app/version)"
-          release_tag="codex-desktop-linux-v${codex_app_version}"
-          release_name="Codex Desktop Linux ${codex_app_version} for Ubuntu 20.04/22.04/24.04"
-
-          if [ -n "$codex_build_number" ]; then
-            release_name="${release_name} (build ${codex_build_number}, Electron ${electron_version})"
-          else
-            release_name="${release_name} (Electron ${electron_version})"
-          fi
+          release_stamp="$(date -u +%Y.%m.%d.%H%M%S)"
+          release_tag="release-${release_stamp}"
+          release_name="Codex Desktop Linux ${release_stamp}"
 
           {
             echo "codex_app_version=$codex_app_version"
@@ -105,6 +94,7 @@ jobs:
             echo "electron_version=$electron_version"
             echo "release_tag=$release_tag"
             echo "release_name=$release_name"
+            echo "release_stamp=$release_stamp"
           } >> "$GITHUB_OUTPUT"
 
       - name: Skip scheduled rebuild when release exists
@@ -138,7 +128,6 @@ jobs:
                   payload = json.load(response)
           except urllib.error.HTTPError as exc:
               if exc.code == 404:
-                  print(f"No release found for {tag}; continuing build.")
                   with open(output_path, "a", encoding="utf-8") as handle:
                       handle.write("skip_build=false\n")
                   raise SystemExit(0)
@@ -156,36 +145,20 @@ jobs:
           CODEX_BUILD_NUMBER: ${{ steps.collect_metadata.outputs.codex_build_number }}
           ELECTRON_VERSION: ${{ steps.collect_metadata.outputs.electron_version }}
           RELEASE_TAG: ${{ steps.collect_metadata.outputs.release_tag }}
+          RELEASE_STAMP: ${{ steps.collect_metadata.outputs.release_stamp }}
         run: |
-          previous_tag="$(git tag --list 'codex-desktop-linux-v*' --sort=-creatordate | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)"
-
-          if [ -n "$previous_tag" ]; then
-            commit_list="$(git log --pretty=format:'- %h %s' "${previous_tag}..HEAD")"
-          else
-            commit_list="$(git log -n 20 --pretty=format:'- %h %s')"
-          fi
-
-          if [ -z "$commit_list" ]; then
-            commit_list="- No recent commits found."
-          fi
-
           {
-            echo "# ${RELEASE_TAG}"
+            echo "# ${RELEASE_STAMP}"
             echo
             echo "- Codex Desktop: ${CODEX_APP_VERSION}"
             if [ -n "$CODEX_BUILD_NUMBER" ]; then
               echo "- Build number: ${CODEX_BUILD_NUMBER}"
             fi
             echo "- Electron: ${ELECTRON_VERSION}"
-            echo "- Artifacts: Ubuntu 20.04, Ubuntu 22.04, Ubuntu 24.04"
-            echo
-            if [ -n "$previous_tag" ]; then
-              echo "## Commits since ${previous_tag}"
-            else
-              echo "## Recent commits"
-            fi
-            echo
-            printf '%s\n' "$commit_list"
+            echo "- Artifacts:"
+            echo "  - codex-desktop_${RELEASE_STAMP}_amd64_ubuntu20.04.deb"
+            echo "  - codex-desktop_${RELEASE_STAMP}_amd64_ubuntu22.04.deb"
+            echo "  - codex-desktop_${RELEASE_STAMP}_amd64_ubuntu24.04.deb"
           } > release-notes.md
 
       - name: Upload release notes artifact
@@ -218,7 +191,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Install build dependencies
         run: |
@@ -244,28 +217,42 @@ jobs:
             ca-certificates \
             curl \
             git \
+            sudo \
+            p7zip-full \
             python3 \
             tar \
             unzip \
             xz-utils
 
-          # Ubuntu 20.04 cannot reliably reach Launchpad from hosted CI.
-          # Install a modern Clang/libc++ toolchain from apt.llvm.org instead.
+          case "$(uname -m)" in
+            x86_64) sevenzip_arch="x64" ;;
+            aarch64) sevenzip_arch="arm64" ;;
+            *)
+              echo "Unsupported CI arch for 7zz bootstrap: $(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          curl -fL "https://www.7-zip.org/a/7z2600-linux-${sevenzip_arch}.tar.xz" -o /tmp/7z.tar.xz
+          tar -C /tmp -xf /tmp/7z.tar.xz 7zz
+          install -m 755 /tmp/7zz /usr/local/bin/7zz
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
           if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
-            apt_retry apt-get install -y gnupg lsb-release
-            curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
-              | gpg --dearmor > /usr/share/keyrings/llvm.gpg
-            echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/focal/ llvm-toolchain-focal-18 main" \
-              > /etc/apt/sources.list.d/llvm.list
+            apt_retry apt-get install -y software-properties-common
+            add-apt-repository -y ppa:ubuntu-toolchain-r/test
             apt_retry apt-get update
-            apt_retry apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev
+            apt_retry apt-get install -y gcc-11 g++-11 binutils
             printf '%s\n' \
               '#include <compare>' \
               '#include <concepts>' \
               '#include <ranges>' \
               '#include <source_location>' \
               'int main(){static_assert(std::three_way_comparable_with<int,int>);auto order=(1 <=> 2);auto v=std::views::iota(0,3);auto loc=std::source_location::current();return (order < 0 && *v.begin()==0 && loc.line()>0) ? 0 : 1;}' \
-              | clang++-18 -std=c++20 -stdlib=libc++ -x c++ - -o /tmp/codex-ci-toolchain-check
+              | g++-11 -std=gnu++20 -x c++ - -o /tmp/codex-ci-toolchain-check
           fi
 
       - name: Download latest DMG artifact
@@ -277,8 +264,15 @@ jobs:
       - name: Build Linux app from downloaded DMG
         env:
           npm_config_python: /usr/bin/python3
+          CODEX_FORCE_DOWNLOADED_7ZIP: "1"
           CODEX_FORCE_SOURCE_NATIVE_MODULES: ${{ matrix.ubuntu_version == '20.04' && '1' || '0' }}
         run: |
+          if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
+            export CC=gcc-11
+            export CXX=g++-11
+            export npm_config_cc=gcc-11
+            export npm_config_cxx=g++-11
+          fi
           cp downloaded-dmg/Codex.dmg ./Codex.dmg
           chmod +x install.sh
           ./install.sh
@@ -330,17 +324,22 @@ jobs:
 
       - name: Build Debian package
         run: |
-          chmod +x build-deb.sh
-          ./build-deb.sh
+          if [ "${{ matrix.ubuntu_version }}" = "20.04" ]; then
+            export CC=gcc-11
+            export CXX=g++-11
+            export npm_config_cc=gcc-11
+            export npm_config_cxx=g++-11
+          fi
+          ./scripts/build-deb.sh
 
       - name: Rename Debian package for release
         env:
           UBUNTU_VERSION: ${{ matrix.ubuntu_version }}
+          RELEASE_STAMP: ${{ needs.prepare-release.outputs.release_stamp }}
         run: |
-          deb_source="$(find dist -maxdepth 1 -type f -name '*.deb' | head -n 1)"
-          deb_basename="$(basename "$deb_source" .deb)"
+          deb_source="$(find dist -maxdepth 1 -type f -name 'codex-desktop_*.deb' | head -n 1)"
           release_dir="dist/release"
-          deb_release_path="${release_dir}/${deb_basename}_ubuntu${UBUNTU_VERSION}.deb"
+          deb_release_path="${release_dir}/codex-desktop_${RELEASE_STAMP}_amd64_ubuntu${UBUNTU_VERSION}.deb"
           mkdir -p "$release_dir"
           cp "$deb_source" "$deb_release_path"
           echo "DEB_RELEASE_PATH=$deb_release_path" >> "$GITHUB_ENV"
@@ -348,7 +347,7 @@ jobs:
       - name: Upload Debian artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codex-desktop-linux-${{ needs.prepare-release.outputs.codex_app_version }}-ubuntu${{ matrix.ubuntu_version }}-deb
+          name: codex-desktop-ubuntu${{ matrix.ubuntu_version }}-deb
           path: ${{ env.DEB_RELEASE_PATH }}
 
   publish-release:
@@ -362,7 +361,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-assets
-          pattern: codex-desktop-linux-*-deb
+          pattern: codex-desktop-ubuntu*-deb
           merge-multiple: true
 
       - name: Download release notes artifact
