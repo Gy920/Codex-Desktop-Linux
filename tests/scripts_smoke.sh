@@ -2080,6 +2080,9 @@ PY
     assert_contains "$REPO_DIR/launcher/start.sh.template" "--force-renderer-accessibility"
     assert_contains "$REPO_DIR/launcher/start.sh.template" "CODEX_FORCE_RENDERER_ACCESSIBILITY=auto|0|1"
     assert_contains "$REPO_DIR/launcher/start.sh.template" "PACKAGED_RUNTIME_HELPER"
+    assert_contains "$REPO_DIR/launcher/start.sh.template" "APP_BUNDLED_LIB_DIR"
+    assert_contains "$REPO_DIR/launcher/start.sh.template" "prepend_bundled_runtime_libs_to_ld_library_path"
+    assert_contains "$REPO_DIR/launcher/start.sh.template" 'export LD_LIBRARY_PATH="$APP_BUNDLED_LIB_DIR:$LD_LIBRARY_PATH"'
     assert_contains "$REPO_DIR/launcher/start.sh.template" "--allow-install-missing"
     assert_contains "$REPO_DIR/scripts/lib/process-detection.sh" "CODEX_INSTALL_ALLOW_RUNNING"
     assert_contains "$REPO_DIR/scripts/lib/process-detection.sh" "assert_install_target_not_running"

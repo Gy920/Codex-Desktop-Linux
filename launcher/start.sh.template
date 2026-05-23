@@ -30,6 +30,7 @@ LAUNCH_ACTION_SOCKET="$LAUNCH_ACTION_RUNTIME_DIR/launch-action.sock"
 PACKAGED_RUNTIME_HELPER="$SCRIPT_DIR/.codex-linux/codex-packaged-runtime.sh"
 COLD_START_HOOK_DIR="$SCRIPT_DIR/.codex-linux/cold-start.d"
 MANAGED_NODE_BIN_DIR="$SCRIPT_DIR/resources/node-runtime/bin"
+APP_BUNDLED_LIB_DIR="$SCRIPT_DIR/lib"
 APP_NOTIFICATION_ICON_NAME="$CODEX_LINUX_APP_ID"
 APP_NOTIFICATION_ICON_BUNDLE="$SCRIPT_DIR/.codex-linux/$APP_NOTIFICATION_ICON_NAME.png"
 APP_NOTIFICATION_ICON_SYSTEM="/usr/share/icons/hicolor/256x256/apps/$APP_NOTIFICATION_ICON_NAME.png"
@@ -492,6 +493,21 @@ prepend_managed_node_runtime_to_path() {
         *) export PATH="$MANAGED_NODE_BIN_DIR:$PATH" ;;
     esac
     export CODEX_MANAGED_NODE_RUNTIME_DIR="$SCRIPT_DIR/resources/node-runtime"
+}
+
+prepend_bundled_runtime_libs_to_ld_library_path() {
+    [ -d "$APP_BUNDLED_LIB_DIR" ] || return 0
+
+    case ":${LD_LIBRARY_PATH:-}:" in
+        *":$APP_BUNDLED_LIB_DIR:"*) ;;
+        *)
+            if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+                export LD_LIBRARY_PATH="$APP_BUNDLED_LIB_DIR:$LD_LIBRARY_PATH"
+            else
+                export LD_LIBRARY_PATH="$APP_BUNDLED_LIB_DIR"
+            fi
+            ;;
+    esac
 }
 
 bundled_plugin_version() {
@@ -2048,6 +2064,7 @@ hydrate_graphical_session_env
 configure_side_by_side_app_env
 load_packaged_runtime_helper
 prepend_managed_node_runtime_to_path
+prepend_bundled_runtime_libs_to_ld_library_path
 register_url_scheme_handlers
 reconcile_runtime_state
 detect_warm_start
