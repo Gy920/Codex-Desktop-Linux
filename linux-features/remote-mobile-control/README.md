@@ -27,6 +27,8 @@ What it changes:
   Linux JavaScript ECDSA P-256 key provider.
 - Lets the remote-control Connections UI render on Linux when upstream marks
   the feature unavailable or withholds the remote-control visibility rollout.
+- Keeps the `Control other devices` settings tab reachable on Linux so this
+  desktop can authorize outbound control of another enrolled device.
 - Refreshes the remote Connections settings state every 5 seconds and
   immediately after focus, visibility, online, or resume signals.
 - Keeps Chrome Browser Use available to remote/mobile controlled sessions when
@@ -132,8 +134,9 @@ Known risks:
 
 - This is not equivalent to macOS Secure Enclave-backed storage. Private key
   material is file-backed and protected by ordinary user file permissions.
-- OpenAI may still reject Linux host enrollment server-side. This feature only
-  removes local macOS-only blockers in the repackaged app.
+- OpenAI may still reject Linux host enrollment or outbound authorization
+  server-side. This feature only removes local macOS-only blockers in the
+  repackaged app.
 - Treat this as experimental account-level remote-control plumbing.
 
 Run the feature tests with:

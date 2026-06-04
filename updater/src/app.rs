@@ -5,9 +5,9 @@ use crate::{
     cli::{Cli, Commands},
     codex_cli,
     config::{RuntimeConfig, RuntimePaths},
-    install, install_rollback, liveness, logging, notify, rollback,
+    feature_picker, install, install_rollback, liveness, logging, notify, rollback,
     state::{CliStatus, PersistedState, UpdateStatus},
-    upstream,
+    upstream, wrapper, wrapper_apply,
 };
 use anyhow::{Context, Result};
 use chrono::{Duration as ChronoDuration, Utc};
@@ -29,6 +29,23 @@ const CLI_MISSING_NOTIFICATION_EVENT: &str = "cli_missing";
 const CLI_MISSING_PROMPT_DISMISS_TTL: ChronoDuration = ChronoDuration::minutes(10);
 const PROMPT_INSTALL_CLI_CANCELLED_EXIT_CODE: i32 = 10;
 const PROMPT_INSTALL_CLI_NO_BACKEND_EXIT_CODE: i32 = 11;
+const POLKIT_AUTH_AGENT_PROCESS_TOKENS: &[&str] = &[
+    "budgie-polkit",
+    "cinnamon-polkit",
+    "gnome-shell",
+    "hyprpolkitagent",
+    "io.elementary.desktop.agent-polkit",
+    "lxpolkit",
+    "lxqt-policykit-agent",
+    "mate-polkit",
+    "polkit-agent",
+    "polkit-dde-agent",
+    "polkit-gnome-authentication-agent",
+    "polkit-kde-authentication-agent",
+    "soteria",
+    "ukui-polkit",
+    "xfce-polkit",
+];
 
 /// Runs the updater command-line entrypoint.
 pub async fn run(cli: Cli) -> Result<()> {
@@ -36,9 +53,12 @@ pub async fn run(cli: Cli) -> Result<()> {
     paths.ensure_dirs()?;
     logging::init(&paths.log_file)?;
 
-    let config = RuntimeConfig::load_or_default(&paths)?;
+    let mut config = RuntimeConfig::load_or_default(&paths)?;
+    if let Some(enabled) = crate::config::settings_wrapper_updates_override() {
+        config.enable_wrapper_updates = enabled;
+    }
     let mut state =
-        PersistedState::load_or_default(&paths.state_file, config.auto_install_on_app_exit)?;
+        PersistedState::load_or_default(&paths.state_file, effective_auto_install(&config))?;
     let original_state = state.clone();
     state.installed_version = install::installed_package_version();
     persist_if_changed(&paths, &state, &original_state)?;
@@ -48,6 +68,11 @@ pub async fn run(cli: Cli) -> Result<()> {
         Commands::CheckNow { if_stale } => {
             run_check_now(&config, &mut state, &paths, if_stale).await
         }
+        Commands::CheckWrapper { json } => run_check_wrapper(&config, &mut state, &paths, json),
+        Commands::ApplyWrapperUpdate => {
+            wrapper_apply::run_apply_wrapper_update(&config, &mut state, &paths).await
+        }
+        Commands::PickFeatures { json } => feature_picker::run_pick_features(&config, &paths, json),
         Commands::CliPreflight {
             cli_path,
             print_path,
@@ -63,7 +88,7 @@ pub async fn run(cli: Cli) -> Result<()> {
             cli_path,
             print_path,
         } => run_prompt_install_cli(&mut state, &paths, cli_path, print_path),
-        Commands::Status { json } => run_status(&mut state, &paths, json),
+        Commands::Status { json } => run_status(&config, &mut state, &paths, json),
         Commands::InstallReady => run_install_ready(&config, &mut state, &paths).await,
         Commands::Rollback => rollback::run(&config, &mut state, &paths).await,
         Commands::InstallDeb { path } => install::install_deb(&path),
@@ -91,8 +116,15 @@ fn persist_if_changed(
     Ok(())
 }
 
+fn effective_auto_install(config: &RuntimeConfig) -> bool {
+    crate::config::settings_auto_install_override().unwrap_or(config.auto_install_on_app_exit)
+}
+
 fn sync_runtime_state(config: &RuntimeConfig, state: &mut PersistedState) {
-    state.auto_install_on_app_exit = config.auto_install_on_app_exit;
+    state.auto_install_on_app_exit = effective_auto_install(config);
+    if state.status != UpdateStatus::WaitingForAppExit {
+        state.waiting_for_app_exit_auto_install = false;
+    }
     state.installed_version = install::installed_package_version();
 }
 
@@ -135,12 +167,58 @@ fn maybe_prune_workspace_cache(workspace_root: &Path, state: &PersistedState) {
     }
 }
 
+fn clear_wrapper_update_candidate_and_persist(
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+) -> Result<()> {
+    let original_state = state.clone();
+    state.clear_wrapper_update_candidate();
+    persist_if_changed(paths, state, &original_state)
+}
+
+fn refresh_installed_wrapper_state(config: &RuntimeConfig, state: &mut PersistedState) {
+    if let Some(installed) = wrapper::installed_wrapper_from_metadata(
+        &config.app_executable_path,
+        &config.builder_bundle_root,
+    ) {
+        state.installed_wrapper_version = installed.version;
+        state.installed_wrapper_commit = Some(installed.commit);
+    } else {
+        state.installed_wrapper_version = None;
+        state.installed_wrapper_commit = None;
+    }
+}
+
+fn clear_stale_wrapper_update_and_persist(
+    config: &RuntimeConfig,
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+) -> Result<()> {
+    let original_state = state.clone();
+    refresh_installed_wrapper_state(config, state);
+    state.clear_wrapper_update_candidate();
+    persist_if_changed(paths, state, &original_state)
+}
+
 fn set_status(
     state: &mut PersistedState,
     paths: &RuntimePaths,
     status: UpdateStatus,
 ) -> Result<()> {
     state.status = status;
+    if state.status != UpdateStatus::WaitingForAppExit {
+        state.waiting_for_app_exit_auto_install = false;
+    }
+    persist_state(paths, state)
+}
+
+fn set_waiting_for_app_exit(
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+    auto_install: bool,
+) -> Result<()> {
+    state.waiting_for_app_exit_auto_install = auto_install;
+    state.status = UpdateStatus::WaitingForAppExit;
     persist_state(paths, state)
 }
 
@@ -286,11 +364,156 @@ async fn run_check_now(
     maybe_notify_cli_missing(state, paths, config.notifications)?;
     maybe_notify_installed(state, paths, config.notifications)?;
     if if_stale && upstream_check_is_fresh(config, state) {
+        if let Err(error) = detect_and_record_wrapper_update(config, state, paths) {
+            warn!(
+                ?error,
+                "wrapper update detection failed during fresh check-now"
+            );
+        }
         info!("skipping check-now because the last successful upstream check is still fresh");
         return reconcile_pending_install(config, state, paths).await;
     }
     run_check_cycle(config, state, paths).await?;
     reconcile_pending_install(config, state, paths).await
+}
+
+/// Detects a newer wrapper release and records it into state. Returns
+/// `Ok(true)` when an update was found and recorded. No-ops (returning
+/// `Ok(false)`) when wrapper tracking is disabled, the builder bundle is not a
+/// git checkout, or no newer commit is available. Never mutates the checkout.
+fn detect_and_record_wrapper_update(
+    config: &RuntimeConfig,
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+) -> Result<bool> {
+    if !config.enable_wrapper_updates {
+        clear_wrapper_update_candidate_and_persist(state, paths)?;
+        return Ok(false);
+    }
+
+    let Some(installed) = wrapper::installed_wrapper_from_metadata(
+        &config.app_executable_path,
+        &config.builder_bundle_root,
+    ) else {
+        clear_stale_wrapper_update_and_persist(config, state, paths)?;
+        return Ok(false);
+    };
+
+    use wrapper::WrapperDetectionState::*;
+
+    let detection = match wrapper::detect_state_from_bundle_root(
+        &config.builder_bundle_root,
+        &installed,
+        &config.wrapper_remote,
+        &config.wrapper_branch,
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            warn!(?error, "wrapper update detection failed");
+            let original_state = state.clone();
+            state.installed_wrapper_version = installed.version;
+            state.installed_wrapper_commit = Some(installed.commit);
+            persist_if_changed(paths, state, &original_state)?;
+            return Ok(false);
+        }
+    };
+
+    let original_state = state.clone();
+    state.installed_wrapper_version = installed.version.clone();
+    state.installed_wrapper_commit = Some(installed.commit.clone());
+
+    match detection {
+        (UpdateAvailable, Some(update)) => {
+            state.wrapper_dev_mode = Some(false);
+            state.installed_wrapper_version = update.installed_version.clone();
+            state.installed_wrapper_commit = Some(update.installed_commit.clone());
+            state.candidate_wrapper_version = update.candidate_version.clone();
+            state.candidate_wrapper_commit = Some(update.candidate_commit.clone());
+            state.wrapper_changelog = Some(update.changelog.clone());
+            persist_if_changed(paths, state, &original_state)?;
+
+            let change_count = update
+                .changelog
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .count();
+            maybe_notify(
+                state,
+                paths,
+                config.notifications,
+                &format!("wrapper_update:{}", update.candidate_commit),
+                "Codex Desktop wrapper update available",
+                &format!(
+                    "A newer Linux wrapper build is available ({change_count} change(s)). Rebuild to apply."
+                ),
+            )?;
+
+            Ok(true)
+        }
+        (DevMode, _) => {
+            state.clear_wrapper_update_candidate();
+            state.wrapper_dev_mode = Some(true);
+            persist_if_changed(paths, state, &original_state)?;
+            Ok(false)
+        }
+        (Aligned, _) => {
+            state.clear_wrapper_update_candidate();
+            state.wrapper_dev_mode = Some(false);
+            persist_if_changed(paths, state, &original_state)?;
+            Ok(false)
+        }
+        (UnknownOffline, _) | (UpdateAvailable, None) => {
+            state.clear_wrapper_update_candidate();
+            persist_if_changed(paths, state, &original_state)?;
+            Ok(false)
+        }
+    }
+}
+
+fn run_check_wrapper(
+    config: &RuntimeConfig,
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+    json: bool,
+) -> Result<()> {
+    if !config.enable_wrapper_updates {
+        clear_wrapper_update_candidate_and_persist(state, paths)?;
+        if json {
+            println!("{}", serde_json::json!({ "enabled": false }));
+        } else {
+            println!(
+                "Wrapper update tracking is disabled (set enable_wrapper_updates = true in config.toml)."
+            );
+        }
+        return Ok(());
+    }
+
+    let found = detect_and_record_wrapper_update(config, state, paths)?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(state)?);
+    } else if found {
+        println!(
+            "wrapper update available: {} -> {}",
+            state
+                .installed_wrapper_commit
+                .as_deref()
+                .unwrap_or("unknown"),
+            state
+                .candidate_wrapper_commit
+                .as_deref()
+                .unwrap_or("unknown")
+        );
+        if let Some(changelog) = state.wrapper_changelog.as_deref() {
+            println!("\n{changelog}");
+        }
+    } else if state.wrapper_dev_mode == Some(true) {
+        println!("wrapper is a local/dev build ahead of upstream; updates are disabled.");
+    } else {
+        println!("wrapper is up to date (or not a git checkout).");
+    }
+
+    Ok(())
 }
 
 fn upstream_check_is_fresh(config: &RuntimeConfig, state: &PersistedState) -> bool {
@@ -302,10 +525,18 @@ fn upstream_check_is_fresh(config: &RuntimeConfig, state: &PersistedState) -> bo
     Utc::now().signed_duration_since(last_successful_check_at) < freshness_window
 }
 
-fn run_status(state: &mut PersistedState, paths: &RuntimePaths, json: bool) -> Result<()> {
+fn run_status(
+    config: &RuntimeConfig,
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+    json: bool,
+) -> Result<()> {
     codex_cli::reconcile_if_present(state, paths)?;
     complete_pending_install_if_already_installed(state, paths)?;
     normalize_workspace_dir_and_persist(state, paths)?;
+    if !config.enable_wrapper_updates {
+        clear_wrapper_update_candidate_and_persist(state, paths)?;
+    }
 
     if json {
         println!("{}", serde_json::to_string_pretty(state)?);
@@ -546,6 +777,12 @@ async fn run_check_cycle(
     state: &mut PersistedState,
     paths: &RuntimePaths,
 ) -> Result<()> {
+    // Keep wrapper state fresh even while a DMG package is pending; otherwise
+    // `status --json` could keep advertising stale wrapper candidates.
+    if let Err(error) = detect_and_record_wrapper_update(config, state, paths) {
+        warn!(?error, "wrapper update detection failed during check cycle");
+    }
+
     if update_install_is_pending(&state.status) {
         info!("skipping upstream check because an update is already pending");
         return Ok(());
@@ -692,13 +929,20 @@ async fn reconcile_pending_install(
             }
 
             if state.auto_install_on_app_exit && liveness::is_app_running(config)? {
+                if !graphical_polkit_auth_agent_is_likely_available() {
+                    defer_install_for_manual_auth(state, paths, &package_path)?;
+                    maybe_notify_manual_install_required(state, paths, config.notifications)?;
+                    return Ok(());
+                }
+                clear_install_auth_required_event(state, paths)?;
+                set_waiting_for_app_exit(state, paths, true)?;
                 maybe_notify(
                     state,
                     paths,
                     config.notifications,
                     "ready_to_install",
                     "Codex Desktop update ready",
-                    "Open Codex Desktop and choose Update to install the ready update.",
+                    "Close Codex Desktop to install the ready update.",
                 )?;
                 return Ok(());
             }
@@ -722,7 +966,17 @@ async fn reconcile_pending_install(
                 return Ok(());
             }
 
+            if state.waiting_for_app_exit_auto_install && !state.auto_install_on_app_exit {
+                set_status(state, paths, UpdateStatus::ReadyToInstall)?;
+                return Ok(());
+            }
+
             if liveness::is_app_running(config)? {
+                if !graphical_polkit_auth_agent_is_likely_available() {
+                    defer_install_for_manual_auth(state, paths, &package_path)?;
+                    maybe_notify_manual_install_required(state, paths, config.notifications)?;
+                    return Ok(());
+                }
                 clear_install_auth_required_event(state, paths)?;
                 maybe_notify(
                     state,
@@ -736,6 +990,12 @@ async fn reconcile_pending_install(
             }
 
             if install_auth_retry_is_blocked(state) {
+                return Ok(());
+            }
+
+            if !graphical_polkit_auth_agent_is_likely_available() {
+                defer_install_for_manual_auth(state, paths, &package_path)?;
+                maybe_notify_manual_install_required(state, paths, config.notifications)?;
                 return Ok(());
             }
 
@@ -816,8 +1076,14 @@ async fn run_install_ready(
     }
 
     if liveness::is_app_running(config)? {
+        if !graphical_polkit_auth_agent_is_likely_available() {
+            defer_install_for_manual_auth(state, paths, &package_path)?;
+            maybe_send_manual_install_required_notification(config.notifications);
+            print_manual_install_required(&package_path);
+            return Ok(());
+        }
         clear_install_auth_required_event(state, paths)?;
-        set_status(state, paths, UpdateStatus::WaitingForAppExit)?;
+        set_waiting_for_app_exit(state, paths, false)?;
         maybe_send_notification(
             config.notifications,
             "Codex Desktop update ready",
@@ -828,6 +1094,13 @@ async fn run_install_ready(
     }
 
     clear_install_auth_required_event(state, paths)?;
+    state.waiting_for_app_exit_auto_install = false;
+    if !graphical_polkit_auth_agent_is_likely_available() {
+        defer_install_for_manual_auth(state, paths, &package_path)?;
+        maybe_send_manual_install_required_notification(config.notifications);
+        print_manual_install_required(&package_path);
+        return Ok(());
+    }
     trigger_install(state, paths, &config.workspace_root, &package_path).await
 }
 
@@ -852,6 +1125,7 @@ fn complete_pending_install_if_already_installed(
         installed_version_matches_candidate(&state.installed_version, &candidate_version);
 
     state.status = UpdateStatus::Installed;
+    state.waiting_for_app_exit_auto_install = false;
     state.candidate_version = None;
     if !candidate_is_installed {
         state.artifact_paths.package_path = None;
@@ -876,6 +1150,7 @@ fn recover_interrupted_install(state: &mut PersistedState, paths: &RuntimePaths)
             installed_version_matches_candidate(&state.installed_version, &candidate_version);
 
         state.status = UpdateStatus::Installed;
+        state.waiting_for_app_exit_auto_install = false;
         state.candidate_version = None;
         if !candidate_is_installed {
             state.artifact_paths.package_path = None;
@@ -910,6 +1185,7 @@ fn recover_interrupted_install(state: &mut PersistedState, paths: &RuntimePaths)
     }
 
     state.status = UpdateStatus::ReadyToInstall;
+    state.waiting_for_app_exit_auto_install = false;
     state.error_message =
         Some("Previous install attempt was interrupted before completion".to_string());
     cache_cleanup::normalize_artifact_workspace_dir(&paths.cache_dir, state);
@@ -1074,10 +1350,12 @@ fn maybe_notify_update_ready(
     }
 
     if enabled {
-        if let Err(error) = notify::send(
-            "Codex Desktop update ready",
-            "A rebuilt Linux package is ready. Open Codex Desktop and choose Update to install it.",
-        ) {
+        let body = if state.auto_install_on_app_exit {
+            "A rebuilt Linux package is ready. Close Codex Desktop to install it, or open Codex Desktop and choose Update."
+        } else {
+            "A rebuilt Linux package is ready. Open Codex Desktop and choose Update to install it."
+        };
+        if let Err(error) = notify::send("Codex Desktop update ready", body) {
             warn!(?error, "failed to send update-ready notification");
         }
     }
@@ -1099,6 +1377,7 @@ async fn trigger_install(
     package_path: &Path,
 ) -> Result<()> {
     state.status = UpdateStatus::Installing;
+    state.waiting_for_app_exit_auto_install = false;
     state.error_message = None;
     persist_state(paths, state)?;
 
@@ -1115,6 +1394,7 @@ async fn trigger_install(
 
     if status.success() {
         state.status = UpdateStatus::Installed;
+        state.waiting_for_app_exit_auto_install = false;
         state.installed_version = install::installed_package_version();
         state.candidate_version = None;
         state.rollback_blocked_candidate_version = None;
@@ -1173,6 +1453,124 @@ fn install_auth_retry_is_blocked(state: &PersistedState) -> bool {
         .is_some_and(|event_key| state.notified_events.contains(event_key))
 }
 
+fn manual_install_required_message(package_path: &Path) -> String {
+    format!(
+        "No graphical polkit authentication agent is available for pkexec. Run this from a terminal after closing Codex Desktop: {}",
+        manual_install_command(package_path)
+    )
+}
+
+fn manual_install_command(package_path: &Path) -> String {
+    let subcommand = match install::PackageKind::from_path(package_path) {
+        install::PackageKind::Deb => "install-deb",
+        install::PackageKind::Rpm => "install-rpm",
+        install::PackageKind::Pacman => "install-pacman",
+    };
+    format!(
+        "sudo /usr/bin/codex-update-manager {subcommand} --path {}",
+        shell_quote_path(package_path)
+    )
+}
+
+fn shell_quote_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn print_manual_install_required(package_path: &Path) {
+    println!("Manual install required: no graphical polkit authentication agent is available.");
+    println!("Run this from a terminal after closing Codex Desktop:");
+    println!("{}", manual_install_command(package_path));
+}
+
+fn defer_install_for_manual_auth(
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+    package_path: &Path,
+) -> Result<()> {
+    state.status = UpdateStatus::ReadyToInstall;
+    state.waiting_for_app_exit_auto_install = false;
+    state.error_message = Some(manual_install_required_message(package_path));
+    persist_state(paths, state)
+}
+
+fn maybe_notify_manual_install_required(
+    state: &mut PersistedState,
+    paths: &RuntimePaths,
+    enabled: bool,
+) -> Result<()> {
+    maybe_notify(
+        state,
+        paths,
+        enabled,
+        "manual_install_required",
+        "Codex update needs manual install",
+        "No graphical authentication agent was found for pkexec. Run codex-update-manager status for details.",
+    )
+}
+
+fn maybe_send_manual_install_required_notification(enabled: bool) {
+    maybe_send_notification(
+        enabled,
+        "Codex update needs manual install",
+        "No graphical authentication agent was found for pkexec. Run codex-update-manager status for details.",
+    );
+}
+
+fn graphical_polkit_auth_agent_is_likely_available() -> bool {
+    if std::env::var_os("CODEX_UPDATE_MANAGER_ASSUME_NO_POLKIT_AGENT").is_some() {
+        return false;
+    }
+    if std::env::var_os("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT").is_some() {
+        return true;
+    }
+    if !has_graphical_session() {
+        return false;
+    }
+    polkit_auth_agent_process_is_running()
+}
+
+fn polkit_auth_agent_process_is_running() -> bool {
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return true;
+    };
+
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        if !file_name
+            .to_string_lossy()
+            .chars()
+            .all(|character| character.is_ascii_digit())
+        {
+            continue;
+        }
+        let process_dir = entry.path();
+        let mut process_text = String::new();
+        if let Ok(comm) = fs::read_to_string(process_dir.join("comm")) {
+            process_text.push_str(&comm);
+            process_text.push('\n');
+        }
+        if let Ok(cmdline) = fs::read(process_dir.join("cmdline")) {
+            process_text.push_str(&String::from_utf8_lossy(&cmdline).replace('\0', " "));
+        }
+        if process_text_matches_polkit_auth_agent(&process_text) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn process_text_matches_polkit_auth_agent(process_text: &str) -> bool {
+    let normalized = process_text.to_ascii_lowercase();
+    if normalized.contains("polkitd") || normalized.contains("polkit-agent-helper") {
+        return false;
+    }
+    POLKIT_AUTH_AGENT_PROCESS_TOKENS
+        .iter()
+        .any(|token| normalized.contains(token))
+}
+
 fn clear_install_auth_required_event(
     state: &mut PersistedState,
     paths: &RuntimePaths,
@@ -1194,6 +1592,7 @@ fn defer_install_until_next_app_exit(
     message: String,
 ) -> Result<()> {
     state.status = UpdateStatus::ReadyToInstall;
+    state.waiting_for_app_exit_auto_install = false;
     state.error_message = Some(message);
 
     if let Some(event_key) = install_auth_required_event_key(state) {
@@ -1229,6 +1628,33 @@ fn notify_failure(
 mod tests {
     use super::*;
 
+    fn test_paths(root: &std::path::Path) -> RuntimePaths {
+        RuntimePaths {
+            config_file: root.join("config/config.toml"),
+            state_file: root.join("state/state.json"),
+            log_file: root.join("state/service.log"),
+            cache_dir: root.join("cache"),
+            state_dir: root.join("state"),
+            config_dir: root.join("config"),
+        }
+    }
+
+    fn test_config(root: &std::path::Path) -> RuntimeConfig {
+        RuntimeConfig {
+            dmg_url: "https://example.com/Codex.dmg".to_string(),
+            initial_check_delay_seconds: 1,
+            check_interval_hours: 6,
+            auto_install_on_app_exit: true,
+            notifications: false,
+            workspace_root: root.join("cache"),
+            builder_bundle_root: root.join("builder"),
+            app_executable_path: root.join("not-running-electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
+        }
+    }
+
     #[test]
     fn upstream_check_freshness_respects_configured_interval() {
         let config = RuntimeConfig {
@@ -1240,6 +1666,9 @@ mod tests {
             workspace_root: std::path::PathBuf::from("/tmp/cache"),
             builder_bundle_root: std::path::PathBuf::from("/tmp/builder"),
             app_executable_path: std::path::PathBuf::from("/tmp/electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
         };
 
         let mut state = PersistedState::new(true);
@@ -1250,6 +1679,167 @@ mod tests {
 
         state.last_successful_check_at = Some(Utc::now() - ChronoDuration::hours(7));
         assert!(!upstream_check_is_fresh(&config, &state));
+    }
+
+    #[test]
+    fn disabled_wrapper_tracking_clears_stale_candidate() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let paths = test_paths(temp.path());
+        paths.ensure_dirs()?;
+        let config = test_config(temp.path());
+
+        let mut state = PersistedState::new(true);
+        state.installed_wrapper_commit = Some("installed".to_string());
+        state.candidate_wrapper_commit = Some("stale".to_string());
+        state.candidate_wrapper_version = Some("0.9.0".to_string());
+        state.wrapper_changelog = Some("old changelog".to_string());
+        state.wrapper_dev_mode = Some(true);
+
+        let found = detect_and_record_wrapper_update(&config, &mut state, &paths)?;
+
+        assert!(!found);
+        assert_eq!(state.installed_wrapper_commit.as_deref(), Some("installed"));
+        assert_eq!(state.candidate_wrapper_commit, None);
+        assert_eq!(state.candidate_wrapper_version, None);
+        assert_eq!(state.wrapper_changelog, None);
+        assert_eq!(state.wrapper_dev_mode, None);
+
+        let persisted = PersistedState::load_or_default(&paths.state_file, true)?;
+        assert_eq!(persisted.candidate_wrapper_commit, None);
+        assert_eq!(persisted.wrapper_changelog, None);
+        assert_eq!(persisted.wrapper_dev_mode, None);
+        Ok(())
+    }
+
+    #[test]
+    fn no_wrapper_update_clears_stale_candidate() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let paths = test_paths(temp.path());
+        paths.ensure_dirs()?;
+        let mut config = test_config(temp.path());
+        config.enable_wrapper_updates = true;
+        std::fs::create_dir_all(&config.builder_bundle_root)?;
+
+        let mut state = PersistedState::new(true);
+        state.installed_wrapper_commit = Some("old-installed".to_string());
+        state.candidate_wrapper_commit = Some("stale".to_string());
+        state.candidate_wrapper_version = Some("0.9.0".to_string());
+        state.wrapper_changelog = Some("old changelog".to_string());
+        state.wrapper_dev_mode = Some(true);
+
+        let found = detect_and_record_wrapper_update(&config, &mut state, &paths)?;
+
+        assert!(!found);
+        assert_eq!(state.installed_wrapper_commit, None);
+        assert_eq!(state.installed_wrapper_version, None);
+        assert_eq!(state.candidate_wrapper_commit, None);
+        assert_eq!(state.candidate_wrapper_version, None);
+        assert_eq!(state.wrapper_changelog, None);
+        assert_eq!(state.wrapper_dev_mode, None);
+
+        let persisted = PersistedState::load_or_default(&paths.state_file, true)?;
+        assert_eq!(persisted.installed_wrapper_commit, None);
+        assert_eq!(persisted.candidate_wrapper_commit, None);
+        assert_eq!(persisted.wrapper_changelog, None);
+        assert_eq!(persisted.wrapper_dev_mode, None);
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_wrapper_detection_clears_stale_candidate_but_records_installed_metadata(
+    ) -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let paths = test_paths(temp.path());
+        paths.ensure_dirs()?;
+        let mut config = test_config(temp.path());
+        config.enable_wrapper_updates = true;
+        std::fs::create_dir_all(config.builder_bundle_root.join(".codex-linux"))?;
+        std::fs::write(
+            config
+                .builder_bundle_root
+                .join(".codex-linux/source-info.json"),
+            r#"{
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "version": "0.8.1"
+}
+"#,
+        )?;
+
+        let mut state = PersistedState::new(true);
+        state.candidate_wrapper_commit = Some("stale".to_string());
+        state.candidate_wrapper_version = Some("0.9.0".to_string());
+        state.wrapper_changelog = Some("old changelog".to_string());
+        state.wrapper_dev_mode = Some(true);
+
+        let found = detect_and_record_wrapper_update(&config, &mut state, &paths)?;
+
+        assert!(!found);
+        assert_eq!(
+            state.installed_wrapper_commit.as_deref(),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert_eq!(state.installed_wrapper_version.as_deref(), Some("0.8.1"));
+        assert_eq!(state.candidate_wrapper_commit, None);
+        assert_eq!(state.candidate_wrapper_version, None);
+        assert_eq!(state.wrapper_changelog, None);
+        assert_eq!(state.wrapper_dev_mode, None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn pending_dmg_update_still_clears_stale_wrapper_candidate() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let paths = test_paths(temp.path());
+        paths.ensure_dirs()?;
+        let config = test_config(temp.path());
+
+        let mut state = PersistedState::new(true);
+        state.status = UpdateStatus::ReadyToInstall;
+        state.candidate_wrapper_commit = Some("stale".to_string());
+        state.candidate_wrapper_version = Some("0.9.0".to_string());
+        state.wrapper_changelog = Some("old changelog".to_string());
+        state.wrapper_dev_mode = Some(true);
+
+        run_check_cycle(&config, &mut state, &paths).await?;
+
+        assert_eq!(state.status, UpdateStatus::ReadyToInstall);
+        assert_eq!(state.candidate_wrapper_commit, None);
+        assert_eq!(state.candidate_wrapper_version, None);
+        assert_eq!(state.wrapper_changelog, None);
+        assert_eq!(state.wrapper_dev_mode, None);
+        let persisted = PersistedState::load_or_default(&paths.state_file, true)?;
+        assert_eq!(persisted.candidate_wrapper_commit, None);
+        assert_eq!(persisted.wrapper_changelog, None);
+        assert_eq!(persisted.wrapper_dev_mode, None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fresh_check_now_still_clears_stale_wrapper_candidate() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let paths = test_paths(temp.path());
+        paths.ensure_dirs()?;
+        let config = test_config(temp.path());
+
+        let mut state = PersistedState::new(true);
+        state.last_successful_check_at = Some(Utc::now());
+        state.candidate_wrapper_commit = Some("stale".to_string());
+        state.candidate_wrapper_version = Some("0.9.0".to_string());
+        state.wrapper_changelog = Some("old changelog".to_string());
+        state.wrapper_dev_mode = Some(true);
+
+        run_check_now(&config, &mut state, &paths, true).await?;
+
+        assert_eq!(state.status, UpdateStatus::Idle);
+        assert_eq!(state.candidate_wrapper_commit, None);
+        assert_eq!(state.candidate_wrapper_version, None);
+        assert_eq!(state.wrapper_changelog, None);
+        assert_eq!(state.wrapper_dev_mode, None);
+        let persisted = PersistedState::load_or_default(&paths.state_file, true)?;
+        assert_eq!(persisted.candidate_wrapper_commit, None);
+        assert_eq!(persisted.wrapper_changelog, None);
+        assert_eq!(persisted.wrapper_dev_mode, None);
+        Ok(())
     }
 
     #[test]
@@ -1297,6 +1887,9 @@ mod tests {
             workspace_root: temp.path().join("cache"),
             builder_bundle_root: temp.path().join("builder"),
             app_executable_path: temp.path().join("not-running-electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
         };
 
         let mut state = PersistedState::new(false);
@@ -1334,6 +1927,9 @@ mod tests {
             workspace_root: temp.path().join("cache"),
             builder_bundle_root: temp.path().join("builder"),
             app_executable_path: temp.path().join("not-running-electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
         };
 
         for status in [
@@ -1434,6 +2030,9 @@ mod tests {
             workspace_root: temp.path().join("cache"),
             builder_bundle_root: temp.path().join("builder"),
             app_executable_path: temp.path().join("not-running-electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
         };
 
         let mut state = PersistedState::new(true);
@@ -1451,8 +2050,10 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn ready_update_waits_for_explicit_install_ready() -> Result<()> {
+    #[test]
+    fn ready_update_waits_for_explicit_install_ready_when_auto_install_is_off() -> Result<()> {
+        let _env_guard = crate::test_util::env_lock();
+        let runtime = tokio::runtime::Runtime::new()?;
         let temp = tempfile::tempdir()?;
         let paths = RuntimePaths {
             config_file: temp.path().join("config/config.toml"),
@@ -1463,6 +2064,78 @@ mod tests {
             config_dir: temp.path().join("config"),
         };
         paths.ensure_dirs()?;
+        let settings_path = temp.path().join("settings.json");
+        let previous_settings_file = std::env::var_os("CODEX_LINUX_SETTINGS_FILE");
+        std::env::set_var("CODEX_LINUX_SETTINGS_FILE", &settings_path);
+        std::fs::write(
+            &settings_path,
+            r#"{"codex-linux-auto-update-on-exit": false}"#,
+        )?;
+
+        let package_path = temp.path().join("dist/codex.deb");
+        std::fs::create_dir_all(
+            package_path
+                .parent()
+                .expect("package path should have parent"),
+        )?;
+        std::fs::write(&package_path, b"deb")?;
+
+        let config = RuntimeConfig {
+            dmg_url: "https://example.com/Codex.dmg".to_string(),
+            initial_check_delay_seconds: 1,
+            check_interval_hours: 6,
+            auto_install_on_app_exit: false,
+            notifications: false,
+            workspace_root: temp.path().join("cache"),
+            builder_bundle_root: temp.path().join("builder"),
+            app_executable_path: temp.path().join("not-running-electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
+        };
+
+        let mut state = PersistedState::new(false);
+        state.status = UpdateStatus::ReadyToInstall;
+        state.candidate_version = Some("2999.03.25.010203+deadbeef".to_string());
+        state.artifact_paths.package_path = Some(package_path);
+
+        let result = runtime.block_on(reconcile_pending_install(&config, &mut state, &paths));
+
+        if let Some(value) = previous_settings_file {
+            std::env::set_var("CODEX_LINUX_SETTINGS_FILE", value);
+        } else {
+            std::env::remove_var("CODEX_LINUX_SETTINGS_FILE");
+        }
+
+        result?;
+        assert_eq!(state.status, UpdateStatus::ReadyToInstall);
+        assert_eq!(state.error_message, None);
+        Ok(())
+    }
+
+    #[test]
+    fn ready_update_auto_install_waits_for_app_exit_when_app_is_running() -> Result<()> {
+        let _env_guard = crate::test_util::env_lock();
+        let runtime = tokio::runtime::Runtime::new()?;
+        let temp = tempfile::tempdir()?;
+        let paths = RuntimePaths {
+            config_file: temp.path().join("config/config.toml"),
+            state_file: temp.path().join("state/state.json"),
+            log_file: temp.path().join("state/service.log"),
+            cache_dir: temp.path().join("cache"),
+            state_dir: temp.path().join("state"),
+            config_dir: temp.path().join("config"),
+        };
+        paths.ensure_dirs()?;
+        let settings_path = temp.path().join("settings.json");
+        let previous_settings_file = std::env::var_os("CODEX_LINUX_SETTINGS_FILE");
+        let previous_assume_agent = std::env::var_os("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT");
+        std::env::set_var("CODEX_LINUX_SETTINGS_FILE", &settings_path);
+        std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT", "1");
+        std::fs::write(
+            &settings_path,
+            r#"{"codex-linux-auto-update-on-exit": true}"#,
+        )?;
 
         let package_path = temp.path().join("dist/codex.deb");
         std::fs::create_dir_all(
@@ -1480,23 +2153,247 @@ mod tests {
             notifications: false,
             workspace_root: temp.path().join("cache"),
             builder_bundle_root: temp.path().join("builder"),
-            app_executable_path: temp.path().join("not-running-electron"),
+            app_executable_path: std::env::current_exe()?,
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
         };
 
         let mut state = PersistedState::new(true);
         state.status = UpdateStatus::ReadyToInstall;
         state.candidate_version = Some("2999.03.25.010203+deadbeef".to_string());
         state.artifact_paths.package_path = Some(package_path);
+        state
+            .notified_events
+            .insert("install_auth_required:2999.03.25.010203+deadbeef".to_string());
 
-        reconcile_pending_install(&config, &mut state, &paths).await?;
+        let result = runtime.block_on(reconcile_pending_install(&config, &mut state, &paths));
 
+        if let Some(value) = previous_settings_file {
+            std::env::set_var("CODEX_LINUX_SETTINGS_FILE", value);
+        } else {
+            std::env::remove_var("CODEX_LINUX_SETTINGS_FILE");
+        }
+        if let Some(value) = previous_assume_agent {
+            std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT", value);
+        } else {
+            std::env::remove_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT");
+        }
+
+        result?;
+        assert_eq!(state.status, UpdateStatus::WaitingForAppExit);
+        assert!(state.waiting_for_app_exit_auto_install);
+        assert!(!install_auth_retry_is_blocked(&state));
+        Ok(())
+    }
+
+    #[test]
+    fn waiting_for_app_exit_auto_install_cancelled_when_setting_turns_off() -> Result<()> {
+        let _env_guard = crate::test_util::env_lock();
+        let runtime = tokio::runtime::Runtime::new()?;
+        let temp = tempfile::tempdir()?;
+        let paths = RuntimePaths {
+            config_file: temp.path().join("config/config.toml"),
+            state_file: temp.path().join("state/state.json"),
+            log_file: temp.path().join("state/service.log"),
+            cache_dir: temp.path().join("cache"),
+            state_dir: temp.path().join("state"),
+            config_dir: temp.path().join("config"),
+        };
+        paths.ensure_dirs()?;
+        let settings_path = temp.path().join("settings.json");
+        let previous_settings_file = std::env::var_os("CODEX_LINUX_SETTINGS_FILE");
+        std::env::set_var("CODEX_LINUX_SETTINGS_FILE", &settings_path);
+        std::fs::write(
+            &settings_path,
+            r#"{"codex-linux-auto-update-on-exit": false}"#,
+        )?;
+
+        let package_path = temp.path().join("dist/codex.deb");
+        std::fs::create_dir_all(
+            package_path
+                .parent()
+                .expect("package path should have parent"),
+        )?;
+        std::fs::write(&package_path, b"deb")?;
+
+        let config = RuntimeConfig {
+            dmg_url: "https://example.com/Codex.dmg".to_string(),
+            initial_check_delay_seconds: 1,
+            check_interval_hours: 6,
+            auto_install_on_app_exit: true,
+            notifications: false,
+            workspace_root: temp.path().join("cache"),
+            builder_bundle_root: temp.path().join("builder"),
+            app_executable_path: std::env::current_exe()?,
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
+        };
+
+        let mut state = PersistedState::new(true);
+        state.status = UpdateStatus::WaitingForAppExit;
+        state.waiting_for_app_exit_auto_install = true;
+        state.candidate_version = Some("2999.03.25.010203+deadbeef".to_string());
+        state.artifact_paths.package_path = Some(package_path);
+
+        let result = runtime.block_on(reconcile_pending_install(&config, &mut state, &paths));
+
+        if let Some(value) = previous_settings_file {
+            std::env::set_var("CODEX_LINUX_SETTINGS_FILE", value);
+        } else {
+            std::env::remove_var("CODEX_LINUX_SETTINGS_FILE");
+        }
+
+        result?;
         assert_eq!(state.status, UpdateStatus::ReadyToInstall);
+        assert!(!state.auto_install_on_app_exit);
+        assert!(!state.waiting_for_app_exit_auto_install);
+        assert_eq!(state.error_message, None);
+        assert!(state.artifact_paths.package_path.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn waiting_for_app_exit_manual_install_survives_auto_toggle_off() -> Result<()> {
+        let _env_guard = crate::test_util::env_lock();
+        let runtime = tokio::runtime::Runtime::new()?;
+        let temp = tempfile::tempdir()?;
+        let paths = RuntimePaths {
+            config_file: temp.path().join("config/config.toml"),
+            state_file: temp.path().join("state/state.json"),
+            log_file: temp.path().join("state/service.log"),
+            cache_dir: temp.path().join("cache"),
+            state_dir: temp.path().join("state"),
+            config_dir: temp.path().join("config"),
+        };
+        paths.ensure_dirs()?;
+        let settings_path = temp.path().join("settings.json");
+        let previous_settings_file = std::env::var_os("CODEX_LINUX_SETTINGS_FILE");
+        let previous_assume_agent = std::env::var_os("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT");
+        std::env::set_var("CODEX_LINUX_SETTINGS_FILE", &settings_path);
+        std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT", "1");
+        std::fs::write(
+            &settings_path,
+            r#"{"codex-linux-auto-update-on-exit": false}"#,
+        )?;
+
+        let package_path = temp.path().join("dist/codex.deb");
+        std::fs::create_dir_all(
+            package_path
+                .parent()
+                .expect("package path should have parent"),
+        )?;
+        std::fs::write(&package_path, b"deb")?;
+
+        let config = RuntimeConfig {
+            dmg_url: "https://example.com/Codex.dmg".to_string(),
+            initial_check_delay_seconds: 1,
+            check_interval_hours: 6,
+            auto_install_on_app_exit: true,
+            notifications: false,
+            workspace_root: temp.path().join("cache"),
+            builder_bundle_root: temp.path().join("builder"),
+            app_executable_path: std::env::current_exe()?,
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
+        };
+
+        let mut state = PersistedState::new(false);
+        state.status = UpdateStatus::WaitingForAppExit;
+        state.waiting_for_app_exit_auto_install = false;
+        state.candidate_version = Some("2999.03.25.010203+deadbeef".to_string());
+        state.artifact_paths.package_path = Some(package_path);
+
+        let result = runtime.block_on(reconcile_pending_install(&config, &mut state, &paths));
+
+        if let Some(value) = previous_settings_file {
+            std::env::set_var("CODEX_LINUX_SETTINGS_FILE", value);
+        } else {
+            std::env::remove_var("CODEX_LINUX_SETTINGS_FILE");
+        }
+        if let Some(value) = previous_assume_agent {
+            std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT", value);
+        } else {
+            std::env::remove_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT");
+        }
+
+        result?;
+        assert_eq!(state.status, UpdateStatus::WaitingForAppExit);
+        assert!(!state.auto_install_on_app_exit);
+        assert!(!state.waiting_for_app_exit_auto_install);
         assert_eq!(state.error_message, None);
         Ok(())
     }
 
-    #[tokio::test]
-    async fn install_ready_waits_when_app_is_running() -> Result<()> {
+    #[test]
+    fn reconcile_reloads_auto_install_setting_override() -> Result<()> {
+        let _env_guard = crate::test_util::env_lock();
+        let runtime = tokio::runtime::Runtime::new()?;
+        let temp = tempfile::tempdir()?;
+        let paths = RuntimePaths {
+            config_file: temp.path().join("config/config.toml"),
+            state_file: temp.path().join("state/state.json"),
+            log_file: temp.path().join("state/service.log"),
+            cache_dir: temp.path().join("cache"),
+            state_dir: temp.path().join("state"),
+            config_dir: temp.path().join("config"),
+        };
+        paths.ensure_dirs()?;
+        let settings_path = temp.path().join("settings.json");
+
+        let previous_settings_file = std::env::var_os("CODEX_LINUX_SETTINGS_FILE");
+        std::env::set_var("CODEX_LINUX_SETTINGS_FILE", &settings_path);
+
+        let config = RuntimeConfig {
+            dmg_url: "https://example.com/Codex.dmg".to_string(),
+            initial_check_delay_seconds: 1,
+            check_interval_hours: 6,
+            auto_install_on_app_exit: true,
+            notifications: false,
+            workspace_root: temp.path().join("cache"),
+            builder_bundle_root: temp.path().join("builder"),
+            app_executable_path: temp.path().join("not-running-electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
+        };
+
+        let mut state = PersistedState::new(true);
+
+        std::fs::write(
+            &settings_path,
+            r#"{"codex-linux-auto-update-on-exit": false}"#,
+        )?;
+        let first_result = runtime.block_on(reconcile_pending_install(&config, &mut state, &paths));
+        assert!(!state.auto_install_on_app_exit);
+
+        std::fs::write(
+            &settings_path,
+            r#"{"codex-linux-auto-update-on-exit": true}"#,
+        )?;
+        let second_result =
+            runtime.block_on(reconcile_pending_install(&config, &mut state, &paths));
+
+        if let Some(value) = previous_settings_file {
+            std::env::set_var("CODEX_LINUX_SETTINGS_FILE", value);
+        } else {
+            std::env::remove_var("CODEX_LINUX_SETTINGS_FILE");
+        }
+
+        first_result?;
+        second_result?;
+        assert!(state.auto_install_on_app_exit);
+        Ok(())
+    }
+
+    #[test]
+    fn install_ready_waits_when_app_is_running() -> Result<()> {
+        let _env_guard = crate::test_util::env_lock();
+        let runtime = tokio::runtime::Runtime::new()?;
+        let previous_assume_agent = std::env::var_os("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT");
+        std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT", "1");
         let temp = tempfile::tempdir()?;
         let paths = RuntimePaths {
             config_file: temp.path().join("config/config.toml"),
@@ -1525,6 +2422,9 @@ mod tests {
             workspace_root: temp.path().join("cache"),
             builder_bundle_root: temp.path().join("builder"),
             app_executable_path: std::env::current_exe()?,
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
         };
 
         let mut state = PersistedState::new(false);
@@ -1535,10 +2435,81 @@ mod tests {
             .notified_events
             .insert("install_auth_required:2999.03.25.010203+deadbeef".to_string());
 
-        run_install_ready(&config, &mut state, &paths).await?;
+        let result = runtime.block_on(run_install_ready(&config, &mut state, &paths));
+
+        if let Some(value) = previous_assume_agent {
+            std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT", value);
+        } else {
+            std::env::remove_var("CODEX_UPDATE_MANAGER_ASSUME_POLKIT_AGENT");
+        }
+
+        result?;
 
         assert_eq!(state.status, UpdateStatus::WaitingForAppExit);
+        assert!(!state.waiting_for_app_exit_auto_install);
         assert!(!install_auth_retry_is_blocked(&state));
+        Ok(())
+    }
+
+    #[test]
+    fn install_ready_stays_open_when_no_polkit_agent_is_available() -> Result<()> {
+        let _env_guard = crate::test_util::env_lock();
+        let runtime = tokio::runtime::Runtime::new()?;
+        let previous_no_agent = std::env::var_os("CODEX_UPDATE_MANAGER_ASSUME_NO_POLKIT_AGENT");
+        std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_NO_POLKIT_AGENT", "1");
+        let temp = tempfile::tempdir()?;
+        let paths = RuntimePaths {
+            config_file: temp.path().join("config/config.toml"),
+            state_file: temp.path().join("state/state.json"),
+            log_file: temp.path().join("state/service.log"),
+            cache_dir: temp.path().join("cache"),
+            state_dir: temp.path().join("state"),
+            config_dir: temp.path().join("config"),
+        };
+        paths.ensure_dirs()?;
+
+        let package_path = temp.path().join("dist/codex desktop.pkg.tar.zst");
+        std::fs::create_dir_all(
+            package_path
+                .parent()
+                .expect("package path should have parent"),
+        )?;
+        std::fs::write(&package_path, b"pkg")?;
+
+        let config = RuntimeConfig {
+            dmg_url: "https://example.com/Codex.dmg".to_string(),
+            initial_check_delay_seconds: 1,
+            check_interval_hours: 6,
+            auto_install_on_app_exit: false,
+            notifications: false,
+            workspace_root: temp.path().join("cache"),
+            builder_bundle_root: temp.path().join("builder"),
+            app_executable_path: std::env::current_exe()?,
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
+        };
+
+        let mut state = PersistedState::new(false);
+        state.status = UpdateStatus::ReadyToInstall;
+        state.candidate_version = Some("2999.03.25.010203+deadbeef".to_string());
+        state.artifact_paths.package_path = Some(package_path);
+
+        let result = runtime.block_on(run_install_ready(&config, &mut state, &paths));
+
+        if let Some(value) = previous_no_agent {
+            std::env::set_var("CODEX_UPDATE_MANAGER_ASSUME_NO_POLKIT_AGENT", value);
+        } else {
+            std::env::remove_var("CODEX_UPDATE_MANAGER_ASSUME_NO_POLKIT_AGENT");
+        }
+
+        result?;
+        assert_eq!(state.status, UpdateStatus::ReadyToInstall);
+        assert!(!state.waiting_for_app_exit_auto_install);
+        let message = state.error_message.as_deref().unwrap_or("");
+        assert!(message.contains("No graphical polkit authentication agent"));
+        assert!(message.contains("sudo /usr/bin/codex-update-manager install-pacman"));
+        assert!(message.contains("codex desktop.pkg.tar.zst'"));
         Ok(())
     }
 
@@ -1564,6 +2535,9 @@ mod tests {
             workspace_root: temp.path().join("cache"),
             builder_bundle_root: temp.path().join("builder"),
             app_executable_path: temp.path().join("not-running-electron"),
+            enable_wrapper_updates: false,
+            wrapper_remote: String::new(),
+            wrapper_branch: "main".to_string(),
         };
 
         let mut state = PersistedState::new(false);
@@ -1597,6 +2571,37 @@ mod tests {
             .status()?;
         assert!(!pkexec_authentication_was_not_obtained(&status));
         Ok(())
+    }
+
+    #[test]
+    fn polkit_agent_process_matching_ignores_daemon_and_matches_agents() {
+        assert!(process_text_matches_polkit_auth_agent(
+            "/usr/lib/polkit-kde-authentication-agent-1"
+        ));
+        assert!(process_text_matches_polkit_auth_agent(
+            "/usr/lib/polkit-gnome-authentication-agent-1"
+        ));
+        assert!(process_text_matches_polkit_auth_agent(
+            "gnome-shell --wayland"
+        ));
+        assert!(!process_text_matches_polkit_auth_agent(
+            "/usr/lib/polkit-1/polkitd --no-debug"
+        ));
+        assert!(!process_text_matches_polkit_auth_agent(
+            "/usr/bin/ssh-agent -D"
+        ));
+    }
+
+    #[test]
+    fn manual_install_command_selects_package_kind_and_quotes_path() {
+        assert_eq!(
+            manual_install_command(Path::new("/tmp/codex update.pkg.tar.zst")),
+            "sudo /usr/bin/codex-update-manager install-pacman --path '/tmp/codex update.pkg.tar.zst'"
+        );
+        assert_eq!(
+            manual_install_command(Path::new("/tmp/codex'update.deb")),
+            "sudo /usr/bin/codex-update-manager install-deb --path '/tmp/codex'\\''update.deb'"
+        );
     }
 
     #[test]
@@ -1863,7 +2868,8 @@ mod tests {
         std::env::remove_var("CODEX_CLI_PATH");
         std::env::set_var("CODEX_UPDATE_MANAGER_SKIP_SYSTEM_CLI_LOOKUP", "1");
 
-        let result = run_status(&mut state, &paths, true);
+        let config = test_config(temp.path());
+        let result = run_status(&config, &mut state, &paths, true);
 
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
@@ -1946,9 +2952,10 @@ mod tests {
         std::env::remove_var("CODEX_CLI_PATH");
         std::env::set_var("CODEX_UPDATE_MANAGER_SKIP_SYSTEM_CLI_LOOKUP", "1");
 
+        let config = test_config(temp.path());
         let mut state = PersistedState::new(true);
         state.cli_path = Some(codex_path);
-        let result = run_status(&mut state, &paths, true);
+        let result = run_status(&config, &mut state, &paths, true);
 
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
