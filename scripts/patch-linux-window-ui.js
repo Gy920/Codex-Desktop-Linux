@@ -27,7 +27,13 @@ const {
   patchLinuxMultiInstanceBootstrap,
 } = require("./patches/bootstrap.js");
 const {
+  applyAutomationScheduleMultiTimePatch,
+  patchAutomationScheduleAssets,
+} = require("./patches/automation-schedule.js");
+const {
+  applyLinuxChromeNativeHostRuntimePatch,
   applyLinuxChromePluginAutoInstallPatch,
+  patchLinuxChromeNativeHostRuntimeAssets,
 } = require("./patches/chrome-plugin.js");
 const {
   COMPUTER_USE_UI_ENV_VAR,
@@ -42,8 +48,12 @@ const {
   applyKeybindsSettingsIndexPatch,
   applyKeybindsSettingsSectionsPatch,
   applyKeybindsSettingsSharedPatch,
+  applyLinuxDesktopSettingsIndexPatch,
+  applyLinuxDesktopSettingsSectionsPatch,
+  applyLinuxDesktopSettingsSharedPatch,
   applyLinuxKeybindOverridesRuntimePatch,
   patchKeybindsSettingsAssets,
+  resolveLinuxDesktopSettingsAsset,
   resolveKeybindsSettingsAsset,
 } = require("./patches/keybinds-settings.js");
 const {
@@ -54,6 +64,7 @@ const {
 } = require("./patches/launch-actions.js");
 const {
   applyBrowserUseNodeReplApprovalPatch,
+  applyLinuxBuildInfoTrayPatch,
   applyLinuxChromeExtensionStatusPatch,
   applyLinuxExplicitIpcQuitPatch,
   applyLinuxExplicitQuitPromptBypassPatch,
@@ -92,7 +103,11 @@ const {
 const {
   applyBrowserAnnotationScreenshotPatch,
   applyLinuxAppSunsetPatch,
+  applyLinuxConfigWriteVersionConflictPatch,
+  applyLinuxI18nGatePatch,
+  applyLinuxProfileSettingsMenuPatch,
   applyLinuxOpaqueWindowsDefaultPatch,
+  applyLinuxFastModeModelGuardPatch,
   applySubagentNicknameMetadataPatch,
   patchCommentPreloadBundle,
 } = require("./patches/webview-assets.js");
@@ -143,18 +158,27 @@ function applyLinuxBrowserUseIabVisibleOnCreatePatch(currentSource) {
 module.exports = {
   COMPUTER_USE_UI_ENV_VAR,
   COMPUTER_USE_UI_SETTINGS_KEY,
+  applyAutomationScheduleMultiTimePatch,
   applyBrowserAnnotationScreenshotPatch,
   applyBrowserUseNodeReplApprovalPatch,
   applyKeybindsSettingsIndexPatch,
   applyKeybindsSettingsSectionsPatch,
   applyKeybindsSettingsSharedPatch,
+  applyLinuxDesktopSettingsIndexPatch,
+  applyLinuxDesktopSettingsSectionsPatch,
+  applyLinuxDesktopSettingsSharedPatch,
   applyLinuxAppSunsetPatch,
   applyLinuxAppUpdaterBridgePatch,
   applyLinuxAppUpdaterMenuPatch,
   applyLinuxAvatarOverlayMousePassthroughPatch,
   applyLinuxBrowserUseIabVisibleOnCreatePatch,
+  applyLinuxBuildInfoTrayPatch,
   applyLinuxChromeExtensionStatusPatch,
+  applyLinuxChromeNativeHostRuntimePatch,
   applyLinuxChromePluginAutoInstallPatch,
+  applyLinuxConfigWriteVersionConflictPatch,
+  applyLinuxI18nGatePatch,
+  applyLinuxProfileSettingsMenuPatch,
   applyLinuxComputerUseFeaturePatch,
   applyLinuxComputerUseInstallFlowPatch,
   applyLinuxComputerUsePluginGatePatch,
@@ -171,6 +195,7 @@ module.exports = {
   applyLinuxMultiInstanceBootstrapPatch,
   applyLinuxOpaqueBackgroundPatch,
   applyLinuxOpaqueWindowsDefaultPatch,
+  applyLinuxFastModeModelGuardPatch,
   applyLinuxQuitGuardPatch,
   applyLinuxReadyToShowWindowStatePatch,
   applyLinuxRemoteControlConfigPreservationPatch,
@@ -198,12 +223,15 @@ module.exports = {
   normalizePatchDescriptors,
   parseOsRelease,
   patchCommentPreloadBundle,
+  patchAutomationScheduleAssets,
   patchExtractedApp,
   patchKeybindsSettingsAssets,
   patchLinuxMultiInstanceBootstrap,
   patchLinuxAppUpdaterBridge,
+  patchLinuxChromeNativeHostRuntimeAssets,
   patchMainBundleSource,
   patchPackageJson,
   resolveDesktopName,
+  resolveLinuxDesktopSettingsAsset,
   resolveKeybindsSettingsAsset,
 };
